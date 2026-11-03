@@ -26,4 +26,10 @@ export default defineNuxtConfig({
   vite: {
     plugins: [tailwindcss()],
   },
+  // `make dev`: the dashboard dev server proxies the API to the local replayd
+  nitro: {
+    devProxy: {
+      '/api': { target: process.env.REPLAYD_API_URL ?? 'http://127.0.0.1:8080/api', changeOrigin: true },
+    },
+  },
 })

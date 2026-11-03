@@ -9,3 +9,4 @@ coverage/
 /data/
 sdk/bench/spikes/t04/out-*.html
 sdk/bench/results/
+.claude/worktrees/

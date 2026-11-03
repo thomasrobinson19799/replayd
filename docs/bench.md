@@ -58,3 +58,19 @@ those are milliseconds old.
 
 Spike numbers for rrweb on the terminal mock are in [spikes/T-01.md](spikes/T-01.md). The full comparison
 (no SDK vs replayd vs current Sentry config) is produced by T-20/T-51.
+
+### Core SDK — T-12…T-14 (2026-11-03)
+| Metric | Measured | Budget | How |
+|---|---|---|---|
+| `@replayd/core` ESM / IIFE, min+gz | 6.81 kB / 6.81 kB | ≤ 7 KB | `pnpm size` |
+| `init()` cold, 1× | median 0.94 ms (p90 1.14 ms) | < 1 ms | `pnpm --filter @replayd/bench run bench:init` (fresh page per sample) |
+| `init()` cold, 4× | median 4.3 ms | – | same |
+| Per unsampled WS message, 4× | median 1.64 µs (runs 1.25–2.75 µs) | < 5 µs | `bench:ws`, 200k × 300-char frames, 5 runs |
+| Per unsampled WS message, 1× | 0.15 µs | – | same |
+
+`init()` sits only just under budget on this noisy VM (see D-11). It will be re-measured in T-51.
+
+## End-to-end
+| Date | Test | Result |
+|---|---|---|
+| 2026-11-03 | `e2e/issues.e2e.mjs`: error thrown in test app → row visible in an open dashboard issues list | 3.89 s / 3.92 s / 3.89 s (budget 5 s) |

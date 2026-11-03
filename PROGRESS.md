@@ -16,13 +16,13 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 ## M1 — Errors from terminals grouped in dashboard
 | ID | Task | Status | Notes / blockers |
 |---|---|---|---|
-| T-12 | Core SDK: init, session manager, transport, retry, ring buffer | todo | |
-| T-13 | Core SDK: errors, flood control, redaction | todo | |
-| T-14 | Core SDK: WebSocket + EventSource patch, gate, outgoing capture | todo | |
+| T-12 | Core SDK: init, session manager, transport, retry, ring buffer | done | init (cold 0.94 ms at 1×), UUIDv7 sessions (rollover idle/duration/storage), transport with bounded queue + retry/Retry-After/403/413/kill switch, keepalive < 60 KB, 100-entry ring buffer, remote config cache + merge. Core was 3.42 KB after T-12 (≤ 4 KB). |
+| T-13 | Core SDK: errors, flood control, redaction | done | onerror/rejection/console/fetch/XHR (D-07 Capacitor path verified against real bridge), network capture with allowlist + caps, history/click breadcrumbs, flood control, recursive redaction (D-12), beforeSend/ignoreErrors/denyUrls/sampleRate. |
+| T-14 | Core SDK: WebSocket + EventSource patch, gate, outgoing capture | done | WS constructor wrapper (instanceof/statics preserved, non-matching sockets untouched), timestamp gate 1.64 µs/msg median at 4× (budget 5 µs), outgoing capture redacted lazily (worker in T-20), abnormal-close warnings rate-limited, EventSource lifecycle. Core 6.81 KB gz (≤ 7 KB), 100 tests. |
 | T-15 | Server: ingest events + remote config + project cache + rate limits | done | ingest crate: events/config/replay(stub 501 until T-21)/sdk files; key → origin → per-project + per-IP token buckets (bounded, swept) → size cap → gzip/JSON check → bounded try_send (503 Retry-After 5); kill switch header; CORS w/o preflight. Load test: 2k req/s p99 0.69 ms, 10k req/s p99 0.92 ms, RSS ≤ 19 MB (docs/bench.md). |
 | T-16 | Server: stack parsing, URL normalization, fingerprint, issues upsert, COPY | done | pipeline crate: V8/SpiderMonkey/JSC stack parser, `~/path` normalization + in-app rules (TradingView/vendor not in-app), build-hash stripping, message normalization (numbers, MT logins, UUID, hex, quotes, symbols + project regex rules), error/HTTP/WS fingerprints, 3 workers, issue upsert (sorted, no deadlocks), approx users_seen, temp-table COPY + ON CONFLICT DO NOTHING, in-memory event-id dedupe, gzip-bomb cap, graceful SIGTERM drain. Load: 2k req/s (6k events/s to PG) p99 2.21 ms, zero loss. |
 | T-17 | Server: auth, users, projects, members, RBAC | done | api crate: argon2id login (rate-limited per IP + per account, constant work for unknown users), 256-bit session tokens stored as SHA-256, HttpOnly/Secure/SameSite=Lax cookie + double-submit CSRF, /api/me, users CRUD (superadmin), projects CRUD + key rotation (upload token shown once, stored hashed), members, Telegram token masked, audit log, in-memory membership cache, bootstrap superadmin. Issue read endpoints for T-18. RBAC matrix tests: unit (§5.10 table) + HTTP integration (5 roles × 9 endpoints). |
-| T-18 | Dashboard: login, projects, issues list/detail | todo | |
+| T-18 | Dashboard: login, projects, issues list/detail | done | Dashboard: login, session store + auth middleware, projects (create shows DSN + one-time upload token), issues list (filters in URL, sort, paging, 2 s polling), issue detail (stack with in-app toggle + context lines, breadcrumbs, tags, platform split, event navigation, replay deep link). e2e/issues.e2e.mjs: error visible in 3.9 s (×3 runs, budget 5 s). Test app = core IIFE page; re-run against examples/nuxt in T-40. |
 
 ## M2 — Full replays with console/network
 | ID | Task | Status | Notes / blockers |
@@ -59,5 +59,6 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | T-52 | Migration: replace Sentry in 3 terminals + sites | todo | |
 
 ## Session log
+- 2026-11-03: M1 complete (T-12…T-18). M2: T-21 done early (server-only, no conflicts). GitHub push access fixed by owner.
 - 2026-11-03: M0 complete (T-01, T-03, T-04, T-10, T-11). Push to GitHub blocked (403: Claude GitHub App has no write access to thomasrobinson19799/replayd); commits are local until access is fixed.
 - 2026-11-03: repo bootstrapped (PRD.md, AGENTS.md, CLAUDE.md, PROGRESS.md). Env: Rust 1.97, Node 22, pnpm, Docker 29 (dockerd must be started manually in the cloud sandbox: `nohup dockerd &`), postgres:17 + arigaio/atlas images available.

@@ -1,0 +1,11 @@
+{
+  "name": "replayd-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "issues": "node issues.e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
