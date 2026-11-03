@@ -8,7 +8,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 |---|---|---|---|
 | T-01 | Spike: rrweb record cost on terminal mock | done | docs/spikes/T-01.md. rrweb 2.2.0 ≈23 KB gz. throttle → mutation-prefilter hook (D-04), rrweb taint fix (D-05). **Open risk:** per-batch p95 ≈5 ms at 4× on mock (budget 2 ms) → T-20 must close. |
 | T-02 | Spike: TradingView v27 canvas capture | skipped | Out of scope v1 (D-01) |
-| T-03 | Spike: CapacitorHttp + fetch/XHR patch | todo | |
+| T-03 | Spike: CapacitorHttp + fetch/XHR patch | done | docs/spikes/T-03.md. Real Capacitor 8.6.0 bridge emulated in Chromium. Bridge clobbers XHR prototype per construction → constructor wrapper (D-07); transport uses CapacitorWebFetch. Real-device check stays in T-26/T-51. |
 | T-04 | Spike: WP Rocket exclusion | todo | |
 | T-10 | Monorepo scaffold, CI, size-limit, Atlas, compose | todo | |
 | T-11 | Wire format + `.rpl` format (Rust) + TS encoder | todo | |

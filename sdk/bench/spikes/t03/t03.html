@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>t03</title></head><body>
+<script>
+  // app code under test: a mix of fetch + XHR calls (absolute URLs like a terminal calling its API host)
+  window.runApp = async () => {
+    const api = location.origin + '/api';
+    const xhr = (method, url, body) => new Promise((res) => { const x = new XMLHttpRequest(); x.open(method, url); x.setRequestHeader('Content-Type', 'application/json'); x.onloadend = () => res({ status: x.status, text: x.responseText }); x.send(body); });
+    const out = {};
+    const r1 = await fetch(api + '/quotes?symbol=EURUSD'); out.f1 = [r1.status, (await r1.json()).ok];
+    const r2 = await fetch(api + '/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ symbol: 'EURUSD', password: 'x' }) }); out.f2 = [r2.status, await r2.text()];
+    const r3 = await fetch(new Request(api + '/missing')); out.f3 = r3.status;
+    out.x1 = await xhr('GET', api + '/quotes?symbol=XAUUSD');
+    out.x2 = await xhr('POST', api + '/orders', JSON.stringify({ a: 1 }));
+    out.x3 = await xhr('GET', api + '/quotes?symbol=GBPUSD'); // 2nd+ XHR: catches prototype clobbering
+    out.rel = (await (await fetch('/api/quotes?symbol=REL')).json()).ok; // relative: never bridged
+    return out;
+  };
+</script></body></html>
