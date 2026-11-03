@@ -1435,6 +1435,7 @@ dependencies = [
  "parking_lot",
  "regex",
  "replayd-alerts",
+ "replayd-common",
  "replayd-db",
  "replayd-ingest",
  "replayd-pipeline",

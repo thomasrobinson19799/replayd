@@ -208,3 +208,12 @@ partitions of sessions (+ 1 event per 5 sessions) for one project, then one `ret
 
 10× the rows, same time: the cut is partition drops (O(days)), not row deletes. Row deletes only happen for
 projects whose retention is shorter than the largest one (bounded by those days).
+
+### Remote config — T-34
+`e2e/remote-config.e2e.mjs` (emulated APK; cached config aged in localStorage):
+
+| Date | Check | Result |
+|---|---|---|
+| 2026-11-03 | change saved in the dashboard → served by `/ingest/:pid/config` | 4 ms (project cache reloaded on save), `v` 1 → 2 |
+| | APK within the 10-min TTL | keeps cached config, no request |
+| | APK after 10 min | 1 request (revalidated, `no-cache`), new `ws.maxFramesPerSec` applied |

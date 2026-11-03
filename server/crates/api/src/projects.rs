@@ -75,6 +75,8 @@ fn project_json(st: &ApiState, user: &Auth, r: &replayd_db::tokio_postgres::Row)
         "asset_rewrite_from": r.get::<_, Vec<String>>("asset_rewrite_from"),
         "retention_days": r.get::<_, i32>("retention_days"),
         "remote_config": r.get::<_, Value>("remote_config"),
+        // what the SDK receives (defaults merged, unknown keys dropped, numbers clamped): T-34 editor preview
+        "remote_config_effective": replayd_common::remote_config::effective(&r.get::<_, Value>("remote_config")),
         "fingerprint_rules": r.get::<_, Value>("fingerprint_rules"),
         "telegram": if is_admin { mask_telegram(&r.get("telegram")) } else { Value::Null },
         "created_at": r.get::<_, i64>("created_ms"),
@@ -237,6 +239,19 @@ pub async fn update(
         && !rc.is_object()
     {
         return Err(ApiError::BadRequest("remote_config must be an object".into()));
+    }
+    // every saved remote config gets a new version `v` (SDKs log/compare it; the ETag changes with it)
+    let mut req = req;
+    if let Some(Value::Object(rc)) = &mut req.remote_config {
+        let c = st.pool.get().await?;
+        let old: Value = c
+            .query_one("SELECT remote_config FROM projects WHERE id = $1", &[&id])
+            .await?
+            .get(0);
+        let v = replayd_common::remote_config::effective(&old)["v"]
+            .as_i64()
+            .unwrap_or(1);
+        rc.insert("v".into(), json!(v + 1));
     }
     if let Some(r) = &req.fingerprint_rules {
         validate_rules(r)?;

@@ -29,6 +29,7 @@ export interface Project {
   asset_rewrite_from: string[]
   retention_days: number
   remote_config: Record<string, unknown>
+  remote_config_effective?: Record<string, unknown>
   fingerprint_rules: { pattern: string, replace?: string }[]
   telegram: Record<string, unknown> | null
   created_at: number

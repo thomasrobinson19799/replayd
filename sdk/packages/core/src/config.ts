@@ -97,7 +97,8 @@ export const stale = (cc: { t: number; c: A } | null) => !cc || now() - cc.t > (
 /** fetches remote config, caches + applies it. Network failures are ignored (local config stays). */
 export const fetchRc = (f: typeof fetch, hdr: (r: Response) => void) =>
   f
-    .call(W, iurl('config'), { credentials: 'omit' })
+    // no-cache: revalidate (ETag → 304) so the HTTP max-age can't add to the TTL (pick-up stays ≤ ttl)
+    .call(W, iurl('config'), { credentials: 'omit', cache: 'no-cache' })
     .then((r) => (hdr(r), r.ok ? r.json() : null))
     .then((c) => {
       if (c && typeof c == 'object') {
