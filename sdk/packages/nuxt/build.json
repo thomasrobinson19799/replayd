@@ -1,0 +1,1 @@
+{ "entries": { "index": "src/index.ts" }, "formats": ["esm"], "platform": "node", "external": ["@replayd/core", "nuxt", "@nuxt/kit", "#app", "#imports"] }

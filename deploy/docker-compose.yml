@@ -1,0 +1,68 @@
+# replayd stack. `make dev` starts only postgres + migrations; `make up` starts everything (profile "app").
+name: replayd
+
+x-pg-url: &pg_url "postgres://replayd:${REPLAYD_PG_PASSWORD:-replayd}@postgres:5432/replayd?sslmode=disable"
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: replayd
+      POSTGRES_USER: replayd
+      POSTGRES_PASSWORD: ${REPLAYD_PG_PASSWORD:-replayd}
+    command: ["postgres", "-c", "shared_buffers=256MB", "-c", "max_connections=100", "-c", "wal_compression=on"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/10-replayd.sql:ro
+    ports:
+      - "127.0.0.1:${REPLAYD_PG_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U replayd -d replayd"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  migrate:
+    image: arigaio/atlas:1.3.6
+    command: ["migrate", "apply", "--dir", "file:///migrations", "--url", *pg_url]
+    volumes:
+      - ../server/migrations:/migrations:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  replayd:
+    profiles: ["app"]
+    build:
+      context: ../server
+    image: ${REPLAYD_IMAGE:-replayd:local}
+    environment:
+      REPLAYD_DATABASE_URL: *pg_url
+      REPLAYD_DATA_DIR: /data
+      REPLAYD_LISTEN: 0.0.0.0:8080
+      REPLAYD_PUBLIC_URL: ${REPLAYD_PUBLIC_URL:-http://localhost:8088}
+      REPLAYD_BOOTSTRAP_ADMIN_EMAIL: ${REPLAYD_BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
+      REPLAYD_BOOTSTRAP_ADMIN_PASSWORD: ${REPLAYD_BOOTSTRAP_ADMIN_PASSWORD:-change-me-now}
+      REPLAYD_LOG: info
+    volumes:
+      - replay-data:/data
+    expose: ["8080"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  nginx:
+    profiles: ["app"]
+    build:
+      context: ..
+      dockerfile: deploy/nginx/Dockerfile
+    image: ${REPLAYD_NGINX_IMAGE:-replayd-nginx:local}
+    ports:
+      - "${REPLAYD_HTTP_PORT:-8088}:80"
+    depends_on: [replayd]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  replay-data:

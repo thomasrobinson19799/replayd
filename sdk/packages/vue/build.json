@@ -1,0 +1,1 @@
+{ "entries": { "index": "src/index.ts" }, "formats": ["esm"], "external": ["@replayd/core", "vue"] }

@@ -1,0 +1,9 @@
+[
+  { "name": "@replayd/core (ESM, sync part)", "path": "packages/core/dist/index.js", "limit": "7 KB", "gzip": true, "brotli": false },
+  { "name": "@replayd/core IIFE (replayd.min.js)", "path": "packages/core/dist/replayd.min.js", "limit": "7 KB", "gzip": true, "brotli": false },
+  { "name": "replay chunk (lazy)", "path": "packages/core/dist/replay.js", "limit": "45 KB", "gzip": true, "brotli": false },
+  { "name": "worker", "path": "packages/core/dist/worker.js", "limit": "4 KB", "gzip": true, "brotli": false },
+  { "name": "@replayd/vue", "path": "packages/vue/dist/index.js", "limit": "1 KB", "gzip": true, "brotli": false },
+  { "name": "@replayd/react", "path": "packages/react/dist/index.js", "limit": "1 KB", "gzip": true, "brotli": false },
+  { "name": "@replayd/nuxt (runtime plugin)", "path": "packages/nuxt/dist/index.js", "limit": "1 KB", "gzip": true, "brotli": false }
+]

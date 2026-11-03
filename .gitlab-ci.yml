@@ -1,0 +1,93 @@
+# replayd CI (PRD §11): sdk:lint-test, sdk:size, server:clippy-test, dashboard:build, bench:nightly, image:build-push.
+stages: [check, bench, image]
+
+variables:
+  PNPM_VERSION: "10.28.0"
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+
+.node:
+  image: node:22-bookworm
+  before_script:
+    - corepack enable && corepack prepare pnpm@$PNPM_VERSION --activate
+  cache:
+    key: pnpm-$CI_JOB_NAME
+    paths: [.pnpm-store]
+
+sdk:lint-test:
+  extends: .node
+  stage: check
+  script:
+    - cd sdk && pnpm config set store-dir ../.pnpm-store && pnpm install --frozen-lockfile
+    - pnpm lint
+    - pnpm test
+  rules: [{ if: '$CI_PIPELINE_SOURCE != "schedule"' }]
+
+sdk:size:
+  extends: .node
+  stage: check
+  script:
+    - cd sdk && pnpm config set store-dir ../.pnpm-store && pnpm install --frozen-lockfile
+    - pnpm size
+  rules: [{ if: '$CI_PIPELINE_SOURCE != "schedule"' }]
+
+server:clippy-test:
+  image: rust:1-bookworm
+  stage: check
+  services:
+    - name: postgres:17
+      alias: postgres
+  variables:
+    POSTGRES_DB: replayd
+    POSTGRES_USER: replayd
+    POSTGRES_PASSWORD: replayd
+    REPLAYD_TEST_DATABASE_URL: "postgres://replayd:replayd@postgres:5432/replayd?sslmode=disable"
+  cache:
+    key: cargo
+    paths: [.cargo/registry, server/target]
+  before_script:
+    - rustup component add rustfmt clippy
+    - curl -sSf https://atlasgo.sh | sh -s -- -y
+  script:
+    - atlas migrate validate --dir file://server/migrations
+    - atlas migrate apply --dir file://server/migrations --url "$REPLAYD_TEST_DATABASE_URL"
+    - cd server
+    - cargo fmt --check
+    - cargo clippy --all-targets --locked -- -D warnings
+    - cargo test --locked
+  rules: [{ if: '$CI_PIPELINE_SOURCE != "schedule"' }]
+
+dashboard:build:
+  extends: .node
+  stage: check
+  script:
+    - cd dashboard && pnpm config set store-dir ../.pnpm-store && pnpm install --frozen-lockfile
+    - pnpm lint
+    - pnpm typecheck
+    - pnpm build
+  rules: [{ if: '$CI_PIPELINE_SOURCE != "schedule"' }]
+
+bench:nightly:
+  image: mcr.microsoft.com/playwright:v1.63.0-noble
+  stage: bench
+  before_script:
+    - corepack enable && corepack prepare pnpm@$PNPM_VERSION --activate
+  script:
+    - cd sdk && pnpm install --frozen-lockfile && pnpm build
+    - pnpm --filter @replayd/bench run bench
+  artifacts:
+    paths: [sdk/bench/results]
+    expire_in: 30 days
+  rules: [{ if: '$CI_PIPELINE_SOURCE == "schedule"' }]
+
+image:build-push:
+  image: docker:27
+  stage: image
+  services: [docker:27-dind]
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build -t "$CI_REGISTRY_IMAGE/replayd:$CI_COMMIT_SHORT_SHA" server
+    - docker build -t "$CI_REGISTRY_IMAGE/nginx:$CI_COMMIT_SHORT_SHA" -f deploy/nginx/Dockerfile .
+    - docker push "$CI_REGISTRY_IMAGE/replayd:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/nginx:$CI_COMMIT_SHORT_SHA"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_TAG'

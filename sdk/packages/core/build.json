@@ -1,0 +1,6 @@
+{
+  "entries": { "index": "src/index.ts", "replay": "src/replay/index.ts", "capacitor": "src/capacitor/index.ts", "worker": "src/worker/index.ts", "wire": "src/wire.ts" },
+  "formats": ["esm", "iife"],
+  "iife": { "replayd.min": "src/iife.ts" },
+  "iifeName": "Replayd"
+}

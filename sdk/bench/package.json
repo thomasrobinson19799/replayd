@@ -3,12 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "spike:t01": "node spikes/t01-rrweb-cost.mjs"
+    "spike:t01": "node spikes/t01-rrweb-cost.mjs",
+    "bench": "node perf/run.mjs"
   },
   "devDependencies": {
     "@rrweb/record": "2.2.0",
-    "esbuild": "0.25.12",
     "playwright": "1.63.0",
-    "ws": "8.18.3"
+    "ws": "8.18.3",
+    "esbuild": "0.28.2"
   }
 }

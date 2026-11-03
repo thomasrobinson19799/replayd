@@ -1,0 +1,19 @@
+{
+  "name": "@replayd/core",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "license": "UNLICENSED",
+  "files": ["dist"],
+  "exports": {
+    ".": { "types": "./dist/types/index.d.ts", "import": "./dist/index.js" },
+    "./replay": { "types": "./dist/types/replay/index.d.ts", "import": "./dist/replay.js" },
+    "./capacitor": { "types": "./dist/types/capacitor/index.d.ts", "import": "./dist/capacitor.js" },
+    "./wire": { "types": "./dist/types/wire.d.ts", "import": "./dist/wire.js" },
+    "./worker": "./dist/worker.js",
+    "./iife": "./dist/replayd.min.js"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build.mjs build.json && tsc -p tsconfig.build.json"
+  }
+}

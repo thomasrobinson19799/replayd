@@ -1,0 +1,61 @@
+# Mirror of .gitlab-ci.yml check jobs for the GitHub-hosted copy (Decisions log D-03).
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: sdk } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.28.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: sdk/pnpm-lock.yaml }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm size
+
+  server:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_DB: replayd, POSTGRES_USER: replayd, POSTGRES_PASSWORD: replayd }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U replayd" --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      REPLAYD_TEST_DATABASE_URL: postgres://replayd:replayd@localhost:5432/replayd?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "rustfmt, clippy" }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: server }
+      - uses: ariga/setup-atlas@v0
+      - run: atlas migrate validate --dir file://server/migrations
+      - run: atlas migrate apply --dir file://server/migrations --url "$REPLAYD_TEST_DATABASE_URL"
+      - run: cargo fmt --check
+        working-directory: server
+      - run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: server
+      - run: cargo test --locked
+        working-directory: server
+
+  dashboard:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: dashboard } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.28.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: dashboard/pnpm-lock.yaml }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build

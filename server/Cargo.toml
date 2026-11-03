@@ -1,0 +1,44 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "bin/replayd"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "UNLICENSED"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[workspace.dependencies]
+replayd-common = { path = "crates/common" }
+replayd-ingest = { path = "crates/ingest" }
+replayd-storage = { path = "crates/storage" }
+replayd-pipeline = { path = "crates/pipeline" }
+replayd-alerts = { path = "crates/alerts" }
+replayd-api = { path = "crates/api" }
+replayd-db = { path = "crates/db" }
+
+anyhow = "1.0.104"
+axum = "0.8.9"
+bytes = "1.12.1"
+mimalloc = "0.1.52"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net", "signal", "time", "sync", "fs", "io-util"] }
+tower = "0.5"
+uuid = { version = "1.29.0", features = ["v7"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["json", "env-filter"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

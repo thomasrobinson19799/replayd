@@ -10,7 +10,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | T-02 | Spike: TradingView v27 canvas capture | skipped | Out of scope v1 (D-01) |
 | T-03 | Spike: CapacitorHttp + fetch/XHR patch | done | docs/spikes/T-03.md. Real Capacitor 8.6.0 bridge emulated in Chromium. Bridge clobbers XHR prototype per construction → constructor wrapper (D-07); transport uses CapacitorWebFetch. Real-device check stays in T-26/T-51. |
 | T-04 | Spike: WP Rocket exclusion | done | docs/spikes/T-04.md. WP Rocket v3.24 real DelayJS PHP + runtime: SDK runs at 18 ms with rocket_delay_js_exclusions '/_rp/sdk/' (D-08). Staging fxglory.com check is part of T-41 (needs access). |
-| T-10 | Monorepo scaffold, CI, size-limit, Atlas, compose | todo | |
+| T-10 | Monorepo scaffold, CI, size-limit, Atlas, compose | done | server/ cargo workspace (7 crates + bin), sdk/ pnpm workspace (core/vue/nuxt/react/vite-plugin/cli + bench), dashboard/ Nuxt 4 SPA, Atlas migration 0001 (+ daily partition fn), deploy/ compose (pg17, atlas 1.3.6, replayd, nginx), Makefile dev/test/bench/up, .gitlab-ci.yml + GH Actions. `make test` and `make up` green. |
 | T-11 | Wire format + `.rpl` format (Rust) + TS encoder | todo | |
 
 ## M1 — Errors from terminals grouped in dashboard

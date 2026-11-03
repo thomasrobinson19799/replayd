@@ -1,0 +1,14 @@
+{
+  "name": "@replayd/nuxt",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "license": "UNLICENSED",
+  "files": ["dist"],
+  "exports": { ".": { "types": "./dist/types/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": {
+    "build": "node ../../scripts/build.mjs build.json && tsc -p tsconfig.build.json"
+  },
+  "peerDependencies": { "@replayd/core": "workspace:*", "nuxt": "^4.0.0" },
+  "devDependencies": { "@replayd/core": "workspace:*" }
+}
