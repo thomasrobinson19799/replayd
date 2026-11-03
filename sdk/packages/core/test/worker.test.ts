@@ -1,8 +1,9 @@
 // @vitest-environment node
 // (a worker has no DOM; Node's own Response/Blob/CompressionStream are used, like the browser's in a worker)
 // Replay worker (T-20): redaction, Centrifugo per-channel sampling, segment encoding, upload retry, gaps.
+import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { gunzip, res } from './h';
+import { clearDb, gunzip, res } from './h';
 import { splitSegment } from '../src/wire';
 
 // the worker build aliases redact.ts's `./config` to worker/cfg.ts (build.json); mirror that here
@@ -17,7 +18,7 @@ const URL0 = 'https://replay.example.com/ingest/p/replay?key=pk';
 const T = 1_730_620_000_000;
 
 type Msg = unknown[];
-async function setup(impl: (url: string, init?: RequestInit) => Promise<Response> = () => Promise.resolve(res(202))) {
+async function setup(impl: (url: string, init?: RequestInit) => Promise<Response> = () => Promise.resolve(res(202)), outbox = 0) {
   vi.resetModules();
   const out: Msg[] = [];
   const f = vi.fn(impl);
@@ -27,7 +28,7 @@ async function setup(impl: (url: string, init?: RequestInit) => Promise<Response
   g.postMessage = (m) => out.push(m as Msg);
   await import('../src/worker/index');
   const send = (m: unknown[]) => g.onmessage!({ data: m });
-  send([0, URL0, RED, 1, 1]);
+  send([0, URL0, RED, 1, 1, outbox]);
   return { f, out, send };
 }
 /** waits for gzip + fetch (real streams, so real timers have to tick) */
@@ -49,6 +50,8 @@ const settle = async (n = 20) => {
     await vi.advanceTimersByTimeAsync(1);
     await new Promise((r) => setImmediate(r));
   }
+  await sleep(60); // gzip / IndexedDB run on real time (slower when test files run in parallel)
+  await vi.advanceTimersByTimeAsync(0);
 };
 async function decode(body: unknown) {
   const { meta, body: rest } = splitSegment(body as Uint8Array);
@@ -190,5 +193,55 @@ describe('replay worker', () => {
     await until(() => f.mock.calls.length === 2);
     expect(f).toHaveBeenCalledTimes(2);
     expect(f.mock.calls[1]![1]).toMatchObject({ keepalive: true });
+  });
+
+  describe('IndexedDB outbox (Capacitor / offlineQueue)', () => {
+    beforeEach(async () => {
+      await clearDb();
+    });
+    const stored = async () => (await (await import('../src/idb')).load('q'))[0].length;
+
+    it('stores each segment before sending and deletes it once the server answered', async () => {
+      const { f, send } = await setup(undefined, 1);
+      send([1, [{ type: 3, timestamp: T, data: { source: 1, positions: [] } }]]);
+      send([3, meta0(), RED, false]);
+      await until(() => f.mock.calls.length === 1);
+      await sleep(50);
+      expect(await stored()).toBe(0);
+    });
+
+    it('keeps segments through network failures and sends them when drained (online / resume)', async () => {
+      let up = false;
+      const { f, send } = await setup(() => (up ? Promise.resolve(res(202)) : Promise.reject(new TypeError('offline'))), 1);
+      send([1, [{ type: 3, timestamp: T, data: { source: 1, positions: [] } }]]);
+      send([3, meta0(0), RED, false]);
+      await until(() => f.mock.calls.length === 1);
+      for (const ms of [1000, 2000, 4000, 8000]) await vi.advanceTimersByTimeAsync(ms + 10);
+      await settle();
+      expect(f).toHaveBeenCalledTimes(5);
+      expect(await stored()).toBe(1);
+      up = true;
+      send([4]);
+      await until(() => f.mock.calls.length === 6);
+      await sleep(50);
+      expect(await stored()).toBe(0);
+      const { meta } = await decode(f.mock.calls[5]![1]!.body);
+      expect(meta).toMatchObject({ sid: 's1', seq: 0, gap: false });
+    });
+
+    it('drains leftovers of a previous run at start; expired ones become a gap', async () => {
+      const idb = await import('../src/idb');
+      const { encodeSegment } = await import('../src/wire');
+      const gz = new Uint8Array(await new Response(new Blob(['[]']).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+      await idb.put('q', { t: T - 25 * 3600e3, b: encodeSegment(JSON.stringify({ sid: 'old', seq: 0 }), gz) });
+      await idb.put('q', { t: T - 60e3, b: encodeSegment(JSON.stringify({ sid: 'old', seq: 1 }), gz) });
+      const { f, send } = await setup(undefined, 1);
+      await until(() => f.mock.calls.length === 1);
+      expect(JSON.parse(splitSegment(f.mock.calls[0]![1]!.body as Uint8Array).meta)).toEqual({ sid: 'old', seq: 1 });
+      send([1, [{ type: 3, timestamp: T, data: { source: 1, positions: [] } }]]);
+      send([3, meta0(0), RED, false]);
+      await until(() => f.mock.calls.length === 2);
+      expect((await decode(f.mock.calls[1]![1]!.body)).meta.gap).toBe(true);
+    });
   });
 });

@@ -6,6 +6,7 @@ pub mod issues;
 pub mod projects;
 pub mod rbac;
 pub mod sessions;
+pub mod sourcemaps;
 pub mod users;
 
 use std::net::{IpAddr, SocketAddr};
@@ -34,6 +35,8 @@ pub struct ApiState {
     pub trusted_proxies: Vec<IpAddr>,
     /// Replay files root (`data/<pid>/<day>/<sid>.rpl`).
     pub data_dir: std::path::PathBuf,
+    /// Source maps (shared with the error pipeline so uploads invalidate its cache), T-30.
+    pub maps: Option<Arc<replayd_pipeline::SourceMaps>>,
     login_ip: BucketMap<IpAddr>,
     login_email: BucketMap<u64>,
 }
@@ -54,12 +57,29 @@ impl ApiState {
             public_url,
             secure_cookies,
             trusted_proxies,
+            maps: None,
             data_dir,
             login_ip: BucketMap::new(50_000),
             login_email: BucketMap::new(50_000),
         };
         let c = st.pool.get().await?;
         st.members.reload(&c).await?;
+        Ok(Arc::new(st))
+    }
+
+    /// Same as [`ApiState::new`] with source maps enabled.
+    pub async fn with_maps(
+        pool: Pool,
+        projects: Arc<ProjectCache>,
+        public_url: String,
+        secure_cookies: bool,
+        trusted_proxies: Vec<IpAddr>,
+        data_dir: std::path::PathBuf,
+        maps: Arc<replayd_pipeline::SourceMaps>,
+    ) -> Result<Arc<Self>, replayd_db::DbError> {
+        let st = Self::new(pool, projects, public_url, secure_cookies, trusted_proxies, data_dir).await?;
+        let mut st = Arc::try_unwrap(st).unwrap_or_else(|_| unreachable!("fresh Arc"));
+        st.maps = Some(maps);
         Ok(Arc::new(st))
     }
 
@@ -112,6 +132,11 @@ pub fn router(st: Arc<ApiState>) -> Router {
         .route("/api/projects/{pid}/sessions", get(sessions::list))
         .route("/api/sessions/{sid}", get(sessions::get_one))
         .route("/api/sessions/{sid}/recording", get(sessions::recording))
+        .route("/api/projects/{pid}/releases", post(sourcemaps::create_release))
+        .route(
+            "/api/projects/{pid}/releases/{release}/sourcemaps",
+            post(sourcemaps::upload).layer(axum::extract::DefaultBodyLimit::max(64 << 20)),
+        )
         .layer(axum::middleware::map_response(no_store))
         .with_state(st)
 }

@@ -140,8 +140,8 @@ function check(segs, thr) {
       }
     }
   out.minGapMs = minGap === Infinity ? null : minGap;
-  // stagger: a node is due on every k-th 500 ms tick → spacing ≥ N - timer jitter
-  if (thr && minGap < thr - 150) out.bad.push(`throttled node emitted after ${minGap} ms (< ${thr})`);
+  // the flush keeps a per-node last-emit time: spacing ≥ N - 50 ms
+  if (thr && minGap < thr - 50) out.bad.push(`throttled node emitted after ${minGap} ms (< ${thr})`);
   return out;
 }
 

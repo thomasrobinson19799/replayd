@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::fingerprint::{self, ErrorInput, Rule};
 use crate::normalize;
 use crate::stack::{self, Frame};
+use crate::symbolicate::SourceMaps;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct InUser {
@@ -91,6 +92,8 @@ pub struct Processed {
     pub fingerprint: [u8; 20],
     pub title: String,
     pub culprit: Option<String>,
+    /// at least one frame was mapped to original source (T-30)
+    pub symbolicated: bool,
     pub payload: Value,
 }
 
@@ -136,6 +139,18 @@ pub fn parse_ua(ua: Option<&str>) -> Ua {
 }
 
 pub fn process(e: InEvent, project_id: i32, received_ms: i64, ua: &Ua, rules: &[Rule]) -> Processed {
+    process_with(e, project_id, received_ms, ua, rules, None)
+}
+
+/// [`process`] with source-map symbolication (by `release`) before fingerprinting (§5.5 steps 3–4).
+pub fn process_with(
+    e: InEvent,
+    project_id: i32,
+    received_ms: i64,
+    ua: &Ua,
+    rules: &[Rule],
+    maps: Option<&SourceMaps>,
+) -> Processed {
     let id =
         e.id.as_deref()
             .and_then(|s| Uuid::try_parse(s).ok())
@@ -159,6 +174,10 @@ pub fn process(e: InEvent, project_id: i32, received_ms: i64, ua: &Ua, rules: &[
     let url = clip(e.url.clone(), 2048);
     let mut frames: Vec<Frame> = stack_raw.as_deref().map(stack::parse).unwrap_or_default();
     normalize::annotate(&mut frames, url.as_deref());
+    let symbolicated = match (maps, e.release.as_deref()) {
+        (Some(m), Some(r)) if !frames.is_empty() => m.symbolicate(project_id, r, &mut frames),
+        _ => false,
+    };
 
     let http = str_at(&e.ctx, "http", "method")
         .and_then(Value::as_str)
@@ -257,6 +276,7 @@ pub fn process(e: InEvent, project_id: i32, received_ms: i64, ua: &Ua, rules: &[
         fingerprint: g.fingerprint,
         title: g.title,
         culprit: g.culprit,
+        symbolicated,
         payload: Value::Object(payload),
     }
 }

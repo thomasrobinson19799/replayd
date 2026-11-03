@@ -49,7 +49,11 @@ function internal(ring: RingEvent[] = []): Ctl {
     send: () => {},
     ie: () => 0,
     c: { ws_disc: 0 },
-    m: () => ({ user: { id: 'u1' }, tags: { brand: 'fx' } }),
+    m: () => ({ user: { id: 'u1' }, tags: { brand: 'fx' }, ctx: {} }),
+    r: () => {},
+    b: () => {},
+    h: () => {},
+    q: () => {},
     platform: 'web',
   };
   return c;

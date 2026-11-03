@@ -102,7 +102,7 @@ export interface ReplaydEvent {
 
 /** Ring-buffer / replay custom event (rrweb custom event tag + payload + original timestamp). */
 export interface RingEvent {
-  type: 'console' | 'network' | 'ws' | 'nav' | 'breadcrumb' | 'error';
+  type: 'console' | 'network' | 'ws' | 'nav' | 'breadcrumb' | 'error' | 'app' | 'gap';
   ts: number;
   data: Record<string, unknown>;
 }
@@ -146,8 +146,16 @@ export interface Internal {
   ie: () => number;
   /** session counters for segment meta */
   c: { ws_disc: number };
-  /** user + tags for the segment `init` meta */
-  m: () => { user?: User; tags: Record<string, string> };
+  /** user, tags and the shared error context (mutable: the Capacitor chunk adds `ctx.app` + tags) */
+  m: () => { user?: User; tags: Record<string, string>; ctx: Record<string, unknown> };
+  /** records a custom event (replay sink or ring) */
+  r: (type: RingEvent['type'], data: RingEvent['data'], ts?: number) => void;
+  /** adds a breadcrumb */
+  b: (cat: Breadcrumb['cat'], msg: string, data?: Breadcrumb['data'], ts?: number) => void;
+  /** flushes core now as on page hide (Capacitor `pause`) */
+  h: () => void;
+  /** handler for event bodies whose upload failed for network/server reasons (Capacitor IndexedDB queue) */
+  q: (f: (kind: string, body: Uint8Array | ArrayBuffer) => void) => void;
   platform: 'web' | 'capacitor-android';
 }
 

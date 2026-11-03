@@ -29,3 +29,21 @@ export async function gunzip(b: unknown): Promise<string> {
 }
 
 export const tick = () => new Promise((r) => setTimeout(r, 0));
+
+/** empties the outbox stores (deleteDatabase would block on connections of earlier module instances) */
+export const clearDb = () =>
+  new Promise<void>((ok) => {
+    const r = indexedDB.open('replayd', 1);
+    r.onupgradeneeded = () => {
+      for (const s of ['q', 'e']) r.result.createObjectStore(s, { autoIncrement: true });
+    };
+    r.onsuccess = () => {
+      const t = r.result.transaction(['q', 'e'], 'readwrite');
+      t.objectStore('q').clear();
+      t.objectStore('e').clear();
+      t.oncomplete = () => {
+        r.result.close();
+        ok();
+      };
+    };
+  });

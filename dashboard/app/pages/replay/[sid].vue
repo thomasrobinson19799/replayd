@@ -3,7 +3,7 @@ import { Replayer } from '@rrweb/replay'
 import '@rrweb/replay/dist/style.css'
 import type { SessionDetail } from '~/utils/types'
 import type { DecodeConfig, DecodeMsg, DecodeStart } from '~/workers/decode'
-import { clock, collect, emptyPanels, lastAtOrBefore, sortPanels, type Marker, type Panels, type RrEvent } from '~/utils/replay'
+import { clock, collect, emptyPanels, lastAtOrBefore, prettyFrame, sortPanels, wsChannels, wsConnections, wsFilter, type Marker, type Panels, type RrEvent, type WsItem } from '~/utils/replay'
 
 const route = useRoute()
 const api = useApi()
@@ -21,7 +21,10 @@ const endTs = ref(0)
 const cur = ref(0) // absolute ms of the playhead
 const panels = shallowRef<Panels>(emptyPanels())
 const panelsVersion = ref(0)
-const tab = ref<'console' | 'network' | 'errors' | 'crumbs' | 'device'>('console')
+const tab = ref<'console' | 'network' | 'ws' | 'errors' | 'crumbs' | 'device'>('console')
+// WebSocket tab filters (PRD §6.2: connections with lifecycle; frames by channel, direction filter, search)
+const ws = reactive({ conn: null as number | null, channel: '', dir: '' as '' | 'in' | 'out', q: '' })
+const wsSel = ref<WsItem | null>(null)
 const loaded = reactive({ frames: 0, bytes: 0, total: null as number | null, done: false })
 
 const stage = ref<HTMLElement | null>(null)
@@ -199,6 +202,23 @@ const lists = computed(() => {
   void panelsVersion.value
   return { ...panels.value }
 })
+const wsConns = computed(() => {
+  void panelsVersion.value
+  return wsConnections(panels.value.ws)
+})
+const wsChans = computed(() => {
+  void panelsVersion.value
+  return wsChannels(panels.value.ws)
+})
+const wsList = computed(() => {
+  void panelsVersion.value
+  return wsFilter(panels.value.ws, ws)
+})
+const wsIdx = computed(() => lastAtOrBefore(wsList.value, cur.value))
+const wsLabel = (it: WsItem) =>
+  it.k === 'frame'
+    ? (it.binary ? `[binary ${it.size ?? 0} B]` : (it.raw ?? ''))
+    : `${it.k}${it.code != null ? ` ${it.code}` : ''} ${it.url ?? ''}`
 const markers = computed<Marker[]>(() => {
   void panelsVersion.value
   return panels.value.markers
@@ -340,13 +360,13 @@ onBeforeUnmount(() => {
       <aside class="flex h-[calc(60vh+4.5rem)] flex-col rounded border border-gray-200 bg-white text-xs">
         <nav class="flex border-b border-gray-200">
           <button
-            v-for="t in (['console', 'network', 'errors', 'crumbs', 'device'] as const)"
+            v-for="t in (['console', 'network', 'ws', 'errors', 'crumbs', 'device'] as const)"
             :key="t"
             class="flex-1 px-2 py-2 capitalize"
             :class="tab === t ? 'border-b-2 border-gray-900 font-semibold' : 'text-gray-500'"
             @click="tab = t"
           >
-            {{ t === 'crumbs' ? 'Breadcrumbs' : t }}
+            {{ t === 'crumbs' ? 'Breadcrumbs' : t === 'ws' ? 'WS' : t }}
             <span
               v-if="t !== 'device'"
               class="text-gray-400"
@@ -394,6 +414,103 @@ onBeforeUnmount(() => {
               </div>
             </template>
           </VirtualList>
+          <div
+            v-else-if="tab === 'ws'"
+            class="flex h-full flex-col"
+            data-testid="ws-tab"
+          >
+            <div class="max-h-28 overflow-auto border-b border-gray-100">
+              <button
+                v-for="c in wsConns"
+                :key="c.id"
+                class="flex w-full gap-2 truncate px-2 text-left leading-6"
+                :class="ws.conn === c.id ? 'bg-gray-100 font-semibold' : ''"
+                :title="c.url"
+                data-testid="ws-conn"
+                @click="ws.conn = ws.conn === c.id ? null : c.id"
+              >
+                <span class="w-6 shrink-0 text-gray-400">#{{ c.id }}</span>
+                <span class="flex-1 truncate font-mono">{{ shortUrl(c.url) }}</span>
+                <span class="shrink-0 text-gray-500">{{ c.frames }} fr</span>
+                <span
+                  v-if="c.closed"
+                  class="shrink-0"
+                  :class="c.code === 1000 || c.code === 1001 ? 'text-gray-500' : 'text-red-600'"
+                >closed {{ c.code }}</span>
+                <span
+                  v-else-if="c.opened"
+                  class="shrink-0 text-green-700"
+                >open</span>
+              </button>
+            </div>
+            <div class="flex gap-1 border-b border-gray-100 p-1">
+              <select
+                v-model="ws.channel"
+                class="min-w-0 flex-1 rounded border border-gray-300 bg-white px-1"
+                data-testid="ws-channel"
+              >
+                <option value="">
+                  all channels
+                </option>
+                <option
+                  v-for="[c, n] in wsChans"
+                  :key="c"
+                  :value="c"
+                >
+                  {{ c }} ({{ n }})
+                </option>
+              </select>
+              <select
+                v-model="ws.dir"
+                class="rounded border border-gray-300 bg-white px-1"
+                data-testid="ws-dir"
+              >
+                <option value="">
+                  in + out
+                </option>
+                <option value="in">
+                  in
+                </option>
+                <option value="out">
+                  out
+                </option>
+              </select>
+              <input
+                v-model="ws.q"
+                placeholder="search"
+                class="w-24 rounded border border-gray-300 px-1"
+                data-testid="ws-search"
+              >
+            </div>
+            <div class="min-h-0 flex-1">
+              <VirtualList
+                :items="wsList"
+                :active-index="wsIdx"
+              >
+                <template #default="{ item, index }">
+                  <div
+                    class="flex cursor-pointer gap-2 truncate border-b border-gray-50 px-2 leading-6"
+                    :class="[index > wsIdx ? 'opacity-40' : '', item.k === 'frame' ? '' : 'font-semibold', item.k === 'close' && item.code !== 1000 && item.code !== 1001 ? 'text-red-600' : '']"
+                    data-testid="ws-row"
+                    @click="seekTo(item.ts); wsSel = item"
+                  >
+                    <span class="w-10 shrink-0 text-gray-400">{{ clock(item.ts - startTs) }}</span>
+                    <span
+                      class="w-4 shrink-0"
+                      :class="item.dir === 'out' ? 'text-sky-600' : 'text-emerald-700'"
+                    >{{ item.k === 'frame' ? (item.dir === 'out' ? '↑' : '↓') : '•' }}</span>
+                    <span class="w-24 shrink-0 truncate text-gray-500">{{ item.ch.join(', ') }}</span>
+                    <span class="truncate font-mono">{{ wsLabel(item) }}</span>
+                  </div>
+                </template>
+              </VirtualList>
+            </div>
+            <pre
+              v-if="wsSel?.raw"
+              class="max-h-40 overflow-auto border-t border-gray-200 bg-gray-50 p-2 font-mono text-[11px]"
+              data-testid="ws-detail"
+            >{{ prettyFrame(wsSel.raw) }}</pre>
+          </div>
           <VirtualList
             v-else-if="tab === 'errors'"
             :items="lists.errors"

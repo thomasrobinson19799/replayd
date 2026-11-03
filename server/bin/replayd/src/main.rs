@@ -82,7 +82,9 @@ async fn main() -> anyhow::Result<()> {
 
     let (events_tx, events_rx) = mpsc::channel::<EventJob>(cfg.ingest.events_queue);
     // Error pipeline: 3 workers share the bounded queue (§5.5). Alert signals are wired in T-32.
-    let pipeline = replayd_pipeline::Shared::new(pool.clone(), projects.clone(), None);
+    // Source maps (T-30): one cache shared by the pipeline (lookups) and the API (uploads invalidate it).
+    let maps = replayd_pipeline::SourceMaps::new(&cfg.data_dir);
+    let pipeline = replayd_pipeline::Shared::with_maps(pool.clone(), projects.clone(), None, Some(maps.clone()));
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let mut workers = replayd_pipeline::spawn(pipeline, events_rx, 3, shutdown_rx.clone());
 
@@ -117,13 +119,14 @@ async fn main() -> anyhow::Result<()> {
     )
     .await
     .map_err(|e| anyhow::anyhow!("bootstrap admin: {e}"))?;
-    let api = replayd_api::ApiState::new(
+    let api = replayd_api::ApiState::with_maps(
         pool.clone(),
         projects.clone(),
         cfg.public_url.clone(),
         cfg.secure_cookies,
         cfg.trusted_proxies.clone(),
         cfg.data_dir.clone(),
+        maps,
     )
     .await?;
 

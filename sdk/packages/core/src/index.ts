@@ -7,7 +7,7 @@ import { capture, ctx, errHandlers, fromErr, isErr, platform, resetFlood, ser, s
 import { httpHooks } from './http';
 import { crumb, drain, rec, resetRing, setSink } from './ring';
 import { act, nextSeq, sInit, sSave, sampled, sess } from './session';
-import { flushEv, hdr, pump, reset, send, setTf, tf } from './transport';
+import { flushEv, hdr, pump, reset, send, setLost, setTf, tf } from './transport';
 import { W, en, ie, offT, on, setOk, un } from './u';
 import { resetWs, wsHooks, wsc } from './ws';
 
@@ -30,7 +30,11 @@ const I: Internal = {
   send,
   ie: () => ie,
   c: wsc,
-  m: () => ({ user, tags }),
+  m: () => ({ user, tags, ctx }),
+  r: rec,
+  b: crumb,
+  h: () => hide(),
+  q: setLost,
   platform: 'web',
 };
 

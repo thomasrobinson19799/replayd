@@ -4,6 +4,8 @@ pub mod event;
 pub mod fingerprint;
 pub mod normalize;
 pub mod stack;
+pub mod symbolicate;
 pub mod worker;
 
+pub use symbolicate::SourceMaps;
 pub use worker::{IssueSignal, Shared, spawn};

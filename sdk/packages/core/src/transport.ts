@@ -27,6 +27,11 @@ export const hdr = (r: Response) => {
   off(+(r.headers.get('x-replayd-disable') ?? 0));
 };
 
+/** receives bodies given up for network/5xx reasons (Capacitor: IndexedDB queue); default: dropped */
+let lost: ((k: string, b: Uint8Array | ArrayBuffer) => void) | 0 = 0;
+export const setLost = (f: typeof lost) => {
+  lost = f;
+};
 const rm = (it: Q) => {
   const i = q.indexOf(it);
   if (i >= 0) qb -= q.splice(i, 1)[0]!.b.byteLength;
@@ -59,6 +64,7 @@ const go = (it: Q, ka: boolean) => {
         );
         return;
       }
+      if (ra && lost) lost(it.k, it.b);
       rm(it);
       pump();
     })

@@ -4,7 +4,7 @@
  * drop-oldest queue and gap markers. Built as a classic IIFE script (build.json) with `./config` aliased to
  * ./cfg so redact.ts runs here without the main-thread config module.
  *
- * Main → worker: [0, url, redact, centrifugo, perChannelPerSec] init · [1, events] batch ·
+ * Main → worker: [0, url, redact, centrifugo, perChannelPerSec, outbox] init · [4] drain the outbox (online/resume) · [1, events] batch ·
  *                [2, ids, values, ts, events] events, then coalesced texts (D-04) · [3, meta, redact, hide] cut a segment
  * Worker → main: [0] raw events ≥ 256 KB (please cut) · [1, seconds] X-Replayd-Disable
  */
@@ -12,6 +12,7 @@ import type { RedactOptions } from '../types';
 import { encodeSegment } from '../wire';
 import { rText, rUrl } from '../redact';
 import { setRedact } from './cfg';
+import { del, load, put } from '../idb';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type A = any;
@@ -19,11 +20,16 @@ interface Q {
   b: Uint8Array;
   n: number;
   f?: boolean;
+  /** outbox key (IndexedDB), when the outbox is on */
+  p?: Promise<IDBValidKey | undefined>;
 }
 const G = self as unknown as { postMessage(m: unknown): void; onmessage: ((e: MessageEvent) => void) | null };
 const CAP = 5 << 20, KA = 6e4, FULL = 256 << 10;
 
 let url = '', co = 0, cpc = 1, last = new Map<string, number>();
+/** IndexedDB outbox (PRD §4.9: Capacitor always, web with `offlineQueue: true`): every segment is stored before
+ *  it is sent and deleted once the server answered; network failures stay stored and are drained later */
+let ob = 0, draining = 0;
 // current segment
 let P: string[] = [], raw = 0, n = 0, t0 = 0, t1 = 0, clicks = 0, errs = 0, warns = 0, urls: string[] = [], asked = 0;
 // segments lost since the last one that went out (queue cap, retries exhausted, rejected)
@@ -109,10 +115,39 @@ const go = (it: Q, ka: boolean) => {
         );
         return;
       }
+      // stored segments survive network/5xx failures (drained on online/resume/next start); else: lost
+      if (ob && ra == -1) {
+        rm(it);
+        return;
+      }
       if (ra) gap++;
-      rm(it);
+      done(it);
       pump();
     });
+};
+/** finished (sent or rejected): out of memory and out of the outbox */
+const done = (it: Q) => {
+  rm(it);
+  it.p?.then((k) => k != null && del('q', k)).catch(() => {});
+};
+/** loads stored segments that are not in memory (oldest first, ≤ the memory cap); expired/over-cap → gap */
+const drain = async () => {
+  if (!ob || draining) return;
+  draining = 1;
+  try {
+    const mine = new Set(await Promise.all(q.map((x) => x.p)));
+    const [recs, lost] = await load('q');
+    gap += lost;
+    for (const [k, r] of recs) {
+      if (mine.has(k) || qb + r.b.byteLength > CAP) continue;
+      q.push({ b: r.b, n: 0, p: Promise.resolve(k) });
+      qb += r.b.byteLength;
+    }
+  } catch {
+    /* no IndexedDB (private mode, quota): memory queue only */
+  }
+  draining = 0;
+  pump();
 };
 /** sends the head (sequential); on hide: everything not in flight, keepalive within a 60 KB total */
 const pump = (hide?: boolean) => {
@@ -142,15 +177,16 @@ const cut = async (m: A, r: Required<RedactOptions>, hide: boolean) => {
   raw = n = t1 = clicks = errs = warns = asked = gap = 0;
   urls = [];
   const gz = new Uint8Array(await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
-  const b = encodeSegment(meta, gz);
-  q.push({ b, n: 0 });
+  const b = encodeSegment(meta, gz), it: Q = { b, n: 0 };
+  if (ob) it.p = put('q', { t: Date.now(), b }).catch(() => undefined);
+  q.push(it);
   qb += b.length;
-  // 5 MB cap: drop the oldest segments that are not in flight
+  // 5 MB memory cap: drop the oldest segments that are not in flight (with the outbox they stay stored)
   for (let i = 0; qb > CAP && i < q.length - 1; )
     if (q[i]!.f) i++;
     else {
       rm(q[i]!);
-      gap++;
+      if (!ob) gap++;
     }
   pump(hide);
 };
@@ -170,7 +206,9 @@ G.onmessage = (e: MessageEvent) => {
       setRedact(m[2]);
       co = m[3];
       cpc = m[4] || 1;
-    }
+      ob = m[5] ? 1 : 0;
+      void drain();
+    } else if (m[0] == 4) void drain();
     if (raw >= FULL && !asked) {
       asked = 1;
       G.postMessage([0]);

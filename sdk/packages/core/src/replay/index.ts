@@ -74,8 +74,10 @@ function run(I: Internal) {
     i: number;
     s: boolean;
     q: boolean;
+    /** last emitted (ms): the stagger is tick-based, this keeps "≤ 1 per N ms" exact under timer jitter */
+    e: number;
   }
-  const NO: P = { n: D, id: -1, i: 0, s: false, q: false };
+  const NO: P = { n: D, id: -1, i: 0, s: false, q: false, e: 0 };
   /** pending nodes by stagger slot (id % (N/500)): a flush only walks the slot that is due */
   let slots: P[][] = [];
   let pendN = 0;
@@ -125,7 +127,7 @@ function run(I: Internal) {
         let p = get(t);
         if (!p) {
           const e = t.parentNode as Element | null, v = e ? inf(e) : 0;
-          p = set(t, v ? { n: t, id: -2, i: v, s: false, q: false } : NO);
+          p = set(t, v ? { n: t, id: -2, i: v, s: false, q: false, e: 0 } : NO);
         }
         if (p.i) {
           queue(p);
@@ -139,7 +141,7 @@ function run(I: Internal) {
             if (!p) {
               // the replay keeps showing the ORIGINAL text node: coalesced updates are emitted against its id
               const x = m.removedNodes[0], id = x ? mirror.getId(x) : -1;
-              if (id > 0) p = set(t, { n: t, id, i: inf(t as Element), s: true, q: false });
+              if (id > 0) p = set(t, { n: t, id, i: inf(t as Element), s: true, q: false, e: 0 });
             }
             if (p) {
               queue(p);
@@ -169,14 +171,14 @@ function run(I: Internal) {
     // slot k is due on ticks ≡ k (mod q) of its own q; slot 0 holds every q (and unresolved ids)
     const ids = new Int32Array(pendN);
     let k = 0, v = '';
-    const keep: P[][] = [];
+    const keep: P[][] = [], now = Date.now();
     for (let s = 0; s < slots.length; s++) {
       const l = slots[s];
       if (!l?.length) continue;
       const out: P[] = [];
       for (const p of l) {
-        const i = p.i, q = ((i < 0 ? -i : i) / 500) | 0;
-        if (q > 1 && p.id >= 0 && tick % q != p.id % q) {
+        const i = p.i, ms = i < 0 ? -i : i, q = (ms / 500) | 0;
+        if ((q > 1 && p.id >= 0 && tick % q != p.id % q) || now - p.e < ms - 50) {
           out.push(p); // not due yet
           continue;
         }
@@ -194,6 +196,7 @@ function run(I: Internal) {
             continue;
           }
         } else if (!n.isConnected) continue;
+        p.e = now;
         const x = (p.s ? n.textContent : n.nodeValue) ?? '';
         v += (k ? '\0' : '') + (i < 0 ? x.replace(/\S/g, '*') : x);
         ids[k++] = p.id;
@@ -218,10 +221,12 @@ function run(I: Internal) {
   let sid = '', seq = -1, init = 0, wsd = 0, stopped = 0;
   const N = navigator;
   const im = () => {
-    const x = I.m();
+    const x = I.m(), a = (x.ctx.app ?? {}) as Record<string, string | undefined>;
     return {
       url: location.href, ref: D.referrer, ua: N.userAgent, vw: W.innerWidth, vh: W.innerHeight, lang: N.language,
       release: o.release, env: o.environment, platform: I.platform, user: x.user, tags: x.tags,
+      // Capacitor (T-26): filled by the capacitor chunk from App/Device.getInfo()
+      app_ver: a.version, device: a.device, os_ver: a.os, wv_ver: a.webview,
     };
   };
   const cut = (hide?: boolean) => {
@@ -252,6 +257,9 @@ function run(I: Internal) {
     cut(true);
   };
   const vis = () => D.visibilityState == 'hidden' && hid();
+  // outbox drain on reconnect / app resume (the capacitor chunk dispatches replayd:resume / replayd:flush)
+  const dr = () => w.postMessage([4]);
+  const L: [EventTarget, string, () => void][] = [[W, 'pagehide', hid], [D, 'visibilitychange', vis], [W, 'online', dr], [W, 'replayd:resume', dr], [W, 'replayd:flush', hid]];
   const T = [setInterval(tickF, 500), setInterval(cut, 5e3)];
   const end = () => {
     stopped = 1;
@@ -259,8 +267,7 @@ function run(I: Internal) {
     R.setMutationHook(null);
     I.sink(null);
     I.onError(() => {});
-    W.removeEventListener('pagehide', hid);
-    D.removeEventListener('visibilitychange', vis);
+    for (const [t, k, f] of L) t.removeEventListener(k, f);
     try {
       stop?.();
     } catch {
@@ -269,12 +276,11 @@ function run(I: Internal) {
     w.terminate();
   };
 
-  w.postMessage([0, new URL(I.url('replay'), location.href).href, o.redact, (o.websocket.channelOf ?? 'centrifugo-json') == 'centrifugo-json' ? 1 : 0, o.websocket.sample.perChannelPerSec]);
+  w.postMessage([0, new URL(I.url('replay'), location.href).href, o.redact, (o.websocket.channelOf ?? 'centrifugo-json') == 'centrifugo-json' ? 1 : 0, o.websocket.sample.perChannelPerSec, I.platform != 'web' || !!o.offlineQueue]);
   // [0] = raw events ≥ 256 KB → cut now; [1, s] = X-Replayd-Disable → stop recording on this page
   w.onmessage = (e: MessageEvent) => (e.data[0] ? end() : cut());
   w.onerror = end;
-  W.addEventListener('pagehide', hid);
-  D.addEventListener('visibilitychange', vis);
+  for (const [t, k, f] of L) t.addEventListener(k, f);
   I.onError(() => cut());
 
   R.setMutationHook(hook);

@@ -13,6 +13,7 @@ use tokio::sync::{Mutex, mpsc};
 
 use crate::event::{self, InEvent, Processed};
 use crate::fingerprint::{Rule, compile_rules};
+use crate::symbolicate::SourceMaps;
 
 /// Max decompressed size of one events body (gzip-bomb guard).
 const MAX_INFLATED: u64 = 8 * 1024 * 1024;
@@ -110,6 +111,7 @@ pub struct Shared {
     /// can inflate issue counters (the DB insert also ignores PK conflicts).
     event_ids: parking_lot::Mutex<SeenSet>,
     signals: Option<mpsc::Sender<IssueSignal>>,
+    maps: Option<Arc<SourceMaps>>,
 }
 
 impl Shared {
@@ -118,6 +120,16 @@ impl Shared {
         projects: Arc<ProjectCache>,
         signals: Option<mpsc::Sender<IssueSignal>>,
     ) -> Arc<Self> {
+        Self::with_maps(pool, projects, signals, None)
+    }
+
+    /// With source-map symbolication (T-30).
+    pub fn with_maps(
+        pool: Pool,
+        projects: Arc<ProjectCache>,
+        signals: Option<mpsc::Sender<IssueSignal>>,
+        maps: Option<Arc<SourceMaps>>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             pool,
             projects,
@@ -125,6 +137,7 @@ impl Shared {
             users: parking_lot::Mutex::new(SeenSet::new(250_000)),
             event_ids: parking_lot::Mutex::new(SeenSet::new(500_000)),
             signals,
+            maps,
         })
     }
 
@@ -163,7 +176,7 @@ pub fn process_job(sh: &Shared, job: &EventJob) -> Vec<Processed> {
     let rules = sh.rules_for(job.project_id);
     let out: Vec<Processed> = events
         .into_iter()
-        .map(|e| event::process(e, job.project_id, job.received_ms as i64, &ua, &rules))
+        .map(|e| event::process_with(e, job.project_id, job.received_ms as i64, &ua, &rules, sh.maps.as_deref()))
         .collect();
     let mut ids = sh.event_ids.lock();
     let before = out.len();
@@ -196,16 +209,18 @@ struct Group {
     platforms: Vec<String>,
     count: i64,
     users: Vec<String>,
+    symbolicated: bool,
 }
 
 const UPSERT: &str = "INSERT INTO issues (project_id, fingerprint, level, source, type, title, culprit, first_seen, \
-     last_seen, first_release, last_release, platforms, times_seen) \
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) \
+     last_seen, first_release, last_release, platforms, times_seen, symbolicated) \
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) \
      ON CONFLICT (project_id, fingerprint) DO UPDATE SET \
        last_seen = GREATEST(issues.last_seen, EXCLUDED.last_seen), \
        first_seen = LEAST(issues.first_seen, EXCLUDED.first_seen), \
        last_release = COALESCE(EXCLUDED.last_release, issues.last_release), \
        times_seen = issues.times_seen + EXCLUDED.times_seen, \
+       symbolicated = issues.symbolicated OR EXCLUDED.symbolicated, \
        platforms = ARRAY(SELECT DISTINCT unnest(issues.platforms || EXCLUDED.platforms) ORDER BY 1), \
        level = CASE WHEN issues.level = 'error' OR EXCLUDED.level = 'error' THEN 'error' ELSE EXCLUDED.level END \
      RETURNING id, (xmax = 0) AS inserted";
@@ -281,6 +296,7 @@ pub async fn flush(sh: &Shared, batch: &mut Vec<Processed>) -> Result<usize, rep
             g.platforms.push(p.platform.clone());
         }
         g.count += p.count;
+        g.symbolicated |= p.symbolicated;
         if let Some(u) = &p.user_id {
             g.users.push(u.clone());
         }
@@ -311,6 +327,7 @@ pub async fn flush(sh: &Shared, batch: &mut Vec<Processed>) -> Result<usize, rep
                     &g.last_release.clone().or_else(|| g.first_release.clone()),
                     &g.platforms,
                     &g.count,
+                    &g.symbolicated,
                 ],
             )
             .await?;

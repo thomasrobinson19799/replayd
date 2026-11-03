@@ -17,7 +17,7 @@ export interface NetworkItem {
 }
 export interface ErrorItem { ts: number, level: string, title: string, issueId?: number }
 export interface CrumbItem { ts: number, cat: string, msg: string }
-export interface WsItem { ts: number, k: string, id: number, url?: string, dir?: string, raw?: string, binary?: boolean, size?: number, code?: number, data: Record<string, unknown> }
+export interface WsItem { ts: number, k: string, id: number, url?: string, dir?: string, raw?: string, binary?: boolean, size?: number, code?: number, ch: string[], data: Record<string, unknown> }
 export type MarkerKind = 'error' | 'warning' | 'ws' | 'nav' | 'app' | 'gap'
 export interface Marker { ts: number, kind: MarkerKind, label: string }
 
@@ -78,10 +78,13 @@ export function collect(events: RrEvent[], p: Panels): void {
         p.markers.push({ ts, kind: 'gap', label: `data dropped${d.reason ? `: ${str(d.reason)}` : ''}` })
         break
       case 'ws': {
-        const item: WsItem = { ts, k: str(d.k), id: Number(d.id ?? 0), data: d }
+        const item: WsItem = { ts, k: str(d.k), id: Number(d.id ?? 0), ch: [], data: d }
         if (typeof d.url === 'string') item.url = d.url
         if (typeof d.dir === 'string') item.dir = d.dir
-        if (typeof d.raw === 'string') item.raw = d.raw
+        if (typeof d.raw === 'string') {
+          item.raw = d.raw
+          item.ch = channelsOf(d.raw)
+        }
         if (d.binary) {
           item.binary = true
           item.size = Number(d.size ?? 0)
@@ -132,4 +135,82 @@ export function clock(ms: number): string {
   const m = Math.floor((s % 3600) / 60)
   const sec = String(s % 60).padStart(2, '0')
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
+}
+
+/**
+ * Centrifugo channels of a (possibly newline-batched) JSON frame: `push.channel` of incoming pushes,
+ * `subscribe/unsubscribe/publish.channel` of outgoing commands. Truncated / non-JSON lines are skipped.
+ */
+export function channelsOf(raw: string): string[] {
+  const out: string[] = []
+  for (const line of raw.split('\n')) {
+    let m: Record<string, { channel?: unknown } | undefined>
+    try {
+      m = JSON.parse(line)
+    }
+    catch {
+      continue
+    }
+    if (!m || typeof m !== 'object') continue
+    for (const k of ['push', 'subscribe', 'unsubscribe', 'publish', 'presence', 'history']) {
+      const c = m[k]?.channel
+      if (typeof c === 'string' && !out.includes(c)) out.push(c)
+    }
+  }
+  return out
+}
+
+export interface WsConn { id: number, url: string, opened?: number, closed?: number, code?: number, reason?: string, reconnects?: number, frames: number, sse: boolean }
+
+/** one row per socket id with its lifecycle (open / close code / duration) and frame count */
+export function wsConnections(items: WsItem[]): WsConn[] {
+  const m = new Map<number, WsConn>()
+  for (const it of items) {
+    let c = m.get(it.id)
+    if (!c) m.set(it.id, (c = { id: it.id, url: it.url ?? '', frames: 0, sse: !!it.data.sse }))
+    if (it.url && !c.url) c.url = it.url
+    if (it.k === 'open') c.opened = it.ts
+    else if (it.k === 'close') {
+      c.closed = it.ts
+      c.code = it.code
+      c.reason = typeof it.data.reason === 'string' ? it.data.reason : undefined
+      c.reconnects = typeof it.data.reconnects === 'number' ? it.data.reconnects : undefined
+    }
+    else if (it.k === 'frame') c.frames++
+  }
+  return [...m.values()].sort((a, b) => a.id - b.id)
+}
+
+export interface WsFilter { conn?: number | null, channel?: string, dir?: '' | 'in' | 'out', q?: string, framesOnly?: boolean }
+
+/** WS tab list: lifecycle + frames filtered by connection, channel, direction and a case-insensitive search */
+export function wsFilter(items: WsItem[], f: WsFilter): WsItem[] {
+  const q = f.q?.trim().toLowerCase()
+  return items.filter((it) => {
+    if (f.conn != null && it.id !== f.conn) return false
+    if (it.k !== 'frame') return !f.framesOnly && !f.channel && !f.dir && !q
+    if (f.dir && it.dir !== f.dir) return false
+    if (f.channel && !it.ch.includes(f.channel)) return false
+    if (q && !(it.raw ?? '').toLowerCase().includes(q)) return false
+    return true
+  })
+}
+
+/** channel → frame count, most frequent first */
+export function wsChannels(items: WsItem[]): [string, number][] {
+  const m = new Map<string, number>()
+  for (const it of items) for (const c of it.ch) m.set(c, (m.get(c) ?? 0) + 1)
+  return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+}
+
+/** pretty-prints each JSON line of a frame (newline-batched Centrifugo frames stay one per line) */
+export function prettyFrame(raw: string): string {
+  return raw.split('\n').map((l) => {
+    try {
+      return JSON.stringify(JSON.parse(l), null, 2)
+    }
+    catch {
+      return l
+    }
+  }).join('\n')
 }
