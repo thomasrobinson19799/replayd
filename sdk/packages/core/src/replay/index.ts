@@ -134,10 +134,16 @@ function run(I: Internal) {
           drop = true;
         }
       } else if (m.type == 'childList') {
-        const a = m.addedNodes;
         let p = get(t);
-        if (p ? p.s : t.nodeType == 1 && inf(t as Element)) {
-          if (t.childNodes.length <= 1 && txt(a) && txt(m.removedNodes)) {
+        const c = t.firstChild;
+        if (p?.s) {
+          // known swap container: ≤ 1 child, a text node (no NodeList wrappers on this path: ~3× cheaper)
+          if (c === t.lastChild && (!c || c.nodeType == 3)) {
+            queue(p);
+            drop = true;
+          }
+        } else if (t.nodeType == 1 && inf(t as Element)) {
+          if (c === t.lastChild && txt(m.addedNodes) && txt(m.removedNodes)) {
             if (!p) {
               // the replay keeps showing the ORIGINAL text node: coalesced updates are emitted against its id
               const x = m.removedNodes[0], id = x ? mirror.getId(x) : -1;
@@ -149,8 +155,10 @@ function run(I: Internal) {
             }
           }
         }
-        if (!drop && added <= GUARD)
+        if (!drop && added <= GUARD) {
+          const a = m.addedNodes;
           for (let k = 0; k < a.length; k++) added += 1 + ((a[k] as Element).getElementsByTagName?.('*').length ?? 0);
+        }
       }
       if (drop) out ??= ms.slice(0, i);
       else if (out) out.push(m);

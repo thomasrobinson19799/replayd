@@ -128,3 +128,51 @@ Budget: < 100 ms p95 ✔. The worst case is a "URL contains" search that matches
 is scanned. The trigram GIN index doesn't help: no-match lookups cost ~5 ms per 10k-row partition, because common
 trigrams such as `pag`/`age` occur in every row, and the planner picks a parallel seq scan, which is slightly
 faster. Every other filter stops after 50 rows on the `(project_id, started_at DESC)` index.
+
+### SDK replay chunk — T-20
+`node sdk/bench/perf/replay.mjs` (env `RATES`, `REPEAT`, `SECONDS`, `SCENARIOS`, `CATS`). The real SDK goes first in
+`<head>` (IIFE `replayd.min.js`, which lazy-loads `replay.js` + `worker.js`) on the terminal mock
+(`sdk/bench/pages/terminal.html?hist=60`: 2,785-node DOM, Centrifugo-like WS at 200 msg/s through the SDK's WS
+wrapper, 10 Hz repaint ≈ 2,000 text mutations/s). Chromium, CDP CPU throttling, cross-origin isolated page.
+Per-batch time is the sum of top-level JS entries into `replay.js` on the renderer main thread per 500 ms window
+(devtools.timeline trace): MutationObserver callbacks, emit, the batch/flush tick, cuts and listeners. Windows start
+1 s after the snapshot; the table shows medians of 3 runs × 20 s. Every run also decodes all uploaded segments and
+checks them: seq 0 holds a full snapshot + init, the Centrifugo token is redacted, no throttled node is emitted
+more often than once per N ms (min spacing 959–999 ms for N = 1000), and `n` matches.
+
+| Date | Scenario | CPU | Batch p50 | Batch p95 | Max | Replay ms/s | Long tasks after snapshot | Uplink | Main heap Δ |
+|---|---|---|---|---|---|---|---|---|---|
+| 2026-11-03 | terminal, `data-rp-throttle="1000"` (D-06) | 4× | 4.54 ms | **7.58 ms** | 7.95 ms | 9.5 | 0 | 1.52 KB/s | 1.37 MB |
+| | watchlist only, 1000 | 4× | 3.67 ms | **5.33 ms** | 7.06 ms | 7.0 | 0 | 1.16 KB/s | 1.37 MB |
+| | textContent swaps, 1000 | 4× | 5.95 ms | **10.09 ms** | 10.4 ms | 12.4 | 0 | 1.46 KB/s | 1.39 MB |
+| | no `data-rp-throttle` (plain rrweb path) | 4× | 28.37 ms | 40.76 ms | 49.7 ms | 58.5 | 0 | 6.28 KB/s | 1.45 MB |
+| | terminal, 1000 | 1× | 0.78 ms | **1.29 ms** | 1.51 ms | 1.7 | 0 | 2.48 KB/s | 1.37 MB |
+| | watchlist only, 1000 | 1× | 0.66 ms | **0.97 ms** | 1.36 ms | 1.5 | 0 | 2.10 KB/s | 1.35 MB |
+
+Budget "< 2 ms p95 per 500 ms batch at 4×": **met at 1× (desktop), not met at 4× on this mock.** The owner
+accepted the measured 4× figure for the terminal mock (Decisions log D-20). It is re-checked on real terminals and
+the reference phone in T-51. Where the 4× time goes (CPU profile, watchlist only): about 0.7 ms/window is the
+floor of just receiving the MutationRecords (measured with a hook that drops everything without work); reading
+each changed text value costs ~4.5 µs at 4× (string materialisation, `nodeValue`, measured in isolation); the
+rest is the hook loop and one `postMessage` per tick. Under CDP throttling a short call that catches a throttle
+slice reads ~1 ms longer, which inflates p95 over 40 windows. Optimisations kept (vs the T-01 prototype):
+per-node state in a symbol property (no WeakMap/mirror lookups per record), pending nodes bucketed by stagger slot,
+flush merged into the batch tick (D-19), a NodeList-free fast path for known `textContent` containers
+(12.8 → 5.95 ms p50 for that scenario), and per-node last-emit times (exact "≤ 1 per N ms").
+
+"batch p95 incl. core" (core `replayd.min.js` time added) reads 16–26 ms at 4×. It is dominated by the
+throttle-slice artifact on core's WS `message` listener, which runs 200×/s as ~µs calls. The direct measurement of
+that path is the T-14 gate bench: 1.64 µs/msg at 4×.
+
+Initial snapshot (the main-thread task that evaluates `replay.js` and runs `startReplay`: worker start + rrweb
+`record()` + full snapshot, page busy with WS + repaint), median of 5:
+
+| Date | DOM | 4× | 1× | Same-session reference: T-01 spike `record()` alone, quiet page | Budget |
+|---|---|---|---|---|---|
+| 2026-11-03 | 2,785 nodes | 308 ms | 61 ms | 248 ms / 44 ms (recorded in T-01 on a faster VM: 121 / 30 ms) | < 150 / < 50 ms |
+
+**Not met on this VM.** This sandbox runs the unchanged spike about 2× slower than the T-01 VM did. The SDK
+task adds ~20–40% on top of bare `record()` (chunk evaluation, worker start, busy page). This is an open item for
+T-51 on the reference device; the budget is unchanged. No long tasks after the snapshot in any steady-state run.
+
+Sizes (`pnpm size`): core 6.86 KB, replay chunk 25.6 KB (≤ 45), worker 2.7 KB (≤ 4).

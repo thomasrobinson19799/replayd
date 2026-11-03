@@ -254,7 +254,9 @@ VALUES ('${sid}', ${pid}, to_timestamp(${tStart} / 1000.0), to_timestamp(${end} 
   mkdirSync(join(stage, pid, day), { recursive: true, mode: 0o755 });
   copyFileSync(file, join(stage, pid, day, `${sid}.rpl`));
   chmodSync(join(stage, pid, day, `${sid}.rpl`), 0o644);
-  sh('docker', ['cp', `${stage}/.`, `${rd}:/data/`]);
+  // -a keeps uid/gid: the tree must belong to the distroless `nonroot` user (65532) that writes /data
+  execFileSync('chown', ['-R', '65532:65532', stage]);
+  sh('docker', ['cp', '-a', `${stage}/.`, `${rd}:/data/`]);
   rmSync(stage, { recursive: true, force: true });
   return { project: slug, project_id: Number(pid), day };
 }
