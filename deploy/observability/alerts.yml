@@ -1,0 +1,47 @@
+# Prometheus alert rules for replayd (PRD §7) → your Alertmanager → Telegram.
+# Scrape replayd on the internal network: http://replayd:8080/metrics (nginx never exposes /metrics).
+groups:
+  - name: replayd
+    rules:
+      - alert: ReplaydDiskAlmostFull
+        expr: replayd_disk_used_bytes / replayd_disk_total_bytes > 0.75
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "replayd data disk {{ $value | humanizePercentage }} full"
+          description: "Replays + DB need ≥ 500 GB (PRD §2.3). Check retention (03:00 Asia/Tehran) and per-project volume."
+      - alert: ReplaydQueueRejections
+        expr: sum by (queue) (rate(replayd_queue_rejected_total[5m])) > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "replayd queue {{ $labels.queue }} rejecting (503 Retry-After)"
+          description: "A bounded queue is full: Postgres / disk too slow or traffic spike. SDKs retry, but data may be dropped."
+      - alert: ReplaydIngestSlow
+        expr: histogram_quantile(0.99, sum by (le) (rate(replayd_ingest_latency_seconds_bucket[5m]))) > 0.02
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "replayd ingest p99 {{ $value | humanizeDuration }} (> 20 ms; budget 5 ms)"
+      - alert: ReplaydProjectSilent
+        # a project that sent data in the last day but nothing for 30 min: SDK broken after a deploy
+        expr: |
+          sum by (project) (increase(replayd_ingest_requests_total{status="202"}[30m])) == 0
+          and on (project) sum by (project) (increase(replayd_ingest_requests_total{status="202"}[1d])) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "No ingest from project {{ $labels.project }} for 30 min"
+          description: "Check the last release of that app (SDK init, DSN, CSP, WP Rocket exclusions)."
+      - alert: ReplaydPostgresBatchErrors
+        expr: sum by (table) (increase(replayd_pg_batch_errors_total[10m])) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: "replayd Postgres batch errors on {{ $labels.table }}"
+          description: "Batches were dropped; see JSON logs (level=error) in Loki: {app=\"replayd\"}."
+      - alert: ReplaydDown
+        expr: up{job="replayd"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "replayd is down"

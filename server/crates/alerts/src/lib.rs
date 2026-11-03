@@ -417,6 +417,7 @@ impl Alerts {
             match send(&me.http, &me.api_base, &cfg, &text).await {
                 Ok(()) => {
                     metrics::counter!("replayd_alerts_sent_total", "kind" => kind.as_str()).increment(1);
+                    metrics::counter!("replayd_telegram_sent_total", "result" => "ok").increment(1);
                     if let Ok(c) = me.pool.get().await {
                         let _ = c
                             .execute(
@@ -429,6 +430,7 @@ impl Alerts {
                 }
                 Err(e) => {
                     metrics::counter!("replayd_alerts_failed_total").increment(1);
+                    metrics::counter!("replayd_telegram_sent_total", "result" => "error").increment(1);
                     tracing::warn!(project_id = pid, issue_id = issue, kind = kind.as_str(), error = %e, "telegram alert failed");
                 }
             }

@@ -1,0 +1,6 @@
+# Example scrape config (merge into your Prometheus). Used by the observability check (scripts/check-observability.sh).
+global: { scrape_interval: 15s }
+rule_files: [/etc/prometheus/alerts.yml]
+scrape_configs:
+  - job_name: replayd
+    static_configs: [{ targets: ["replayd:8080"] }]

@@ -152,10 +152,18 @@ impl SourceMaps {
             let Some(sm) = self.get(project_id, release, &f.path) else {
                 continue;
             };
+            let fail = || {
+                metrics::counter!("replayd_symbolication_failures_total", "project" => project_id.to_string())
+                    .increment(1)
+            };
             let Some(tok) = sm.lookup_token(f.line - 1, f.col.saturating_sub(1)) else {
+                fail();
                 continue;
             };
-            let Some(src) = tok.get_source() else { continue };
+            let Some(src) = tok.get_source() else {
+                fail();
+                continue;
+            };
             let line = tok.get_src_line() as usize;
             let mut o = OrigFrame {
                 file: clean_source(src),

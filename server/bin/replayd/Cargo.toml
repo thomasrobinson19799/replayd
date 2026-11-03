@@ -25,6 +25,10 @@ futures-util = "0.3.31"
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
+fs4 = { version = "1.1.0", features = ["sync"] }
+metrics = "0.24.6"
+uuid = { workspace = true, features = ["v7"] }
 
 [dev-dependencies]
 tower.workspace = true
