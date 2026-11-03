@@ -112,6 +112,8 @@ pub struct Shared {
     event_ids: parking_lot::Mutex<SeenSet>,
     signals: Option<mpsc::Sender<IssueSignal>>,
     maps: Option<Arc<SourceMaps>>,
+    /// (project, release) → last `releases.last_event_at` refresh (source-map retention, at most hourly)
+    releases_seen: parking_lot::Mutex<HashMap<(i32, String), Instant>>,
 }
 
 impl Shared {
@@ -138,6 +140,7 @@ impl Shared {
             event_ids: parking_lot::Mutex::new(SeenSet::new(500_000)),
             signals,
             maps,
+            releases_seen: parking_lot::Mutex::new(HashMap::new()),
         })
     }
 
@@ -402,6 +405,35 @@ pub async fn flush(sh: &Shared, batch: &mut Vec<Processed>) -> Result<usize, rep
             "UPDATE issues SET users_seen = users_seen + v.n \
              FROM (SELECT unnest($1::bigint[]) AS id, unnest($2::int[]) AS n) v WHERE issues.id = v.id",
             &[&user_ids, &user_incs],
+        )
+        .await?;
+    }
+    // releases.last_event_at drives source-map retention (§5.6: 30 days after the last event); hourly per release
+    let (rp, rv): (Vec<i32>, Vec<String>) = {
+        let mut seen = sh.releases_seen.lock();
+        if seen.len() > 10_000 {
+            seen.clear();
+        }
+        let mut out = (vec![], vec![]);
+        for p in batch.iter() {
+            let Some(r) = &p.release else { continue };
+            let k = (p.project_id, r.clone());
+            if seen
+                .get(&k)
+                .is_none_or(|t| t.elapsed() > Duration::from_secs(3600))
+            {
+                seen.insert(k, Instant::now());
+                out.0.push(p.project_id);
+                out.1.push(r.clone());
+            }
+        }
+        out
+    };
+    if !rp.is_empty() {
+        c.execute(
+            "UPDATE releases r SET last_event_at = now() FROM unnest($1::int[], $2::text[]) AS v(pid, rel) \
+             WHERE r.project_id = v.pid AND r.version = v.rel",
+            &[&rp, &rv],
         )
         .await?;
     }

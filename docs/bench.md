@@ -196,3 +196,15 @@ Playwright `setOffline`). Real-device run: T-51 APK checklist.
 | 2026-11-03 | web (127.0.0.1) + APK (localhost origin, Capacitor stub) errors of release A → same issue | ✔ one issue, platforms web + capacitor-android |
 | | frames | `src/order.ts:4:23`, context + 3 lines before / 1 after, culprit `src/order.ts` |
 | | release B: error before upload → unsymbolicated; upload → reprocessed | ✔ frames updated, issue `symbolicated = true` (< 1 s) |
+
+### Retention — T-33
+`cargo test -p replayd-storage --test retention_db -- --ignored --nocapture` (`RETENTION_BENCH_PER_DAY`): 15 daily
+partitions of sessions (+ 1 event per 5 sessions) for one project, then one `retention::run_once` to the 14-day window.
+
+| Date | Seed | Before → after | Partitions dropped | Run |
+|---|---|---|---|---|
+| 2026-11-03 | 15 × 1,000 sessions | 15,000 → 14,000 (14 days) | 4 (sessions + events, 2 days) | 142 ms |
+| | 15 × 10,000 sessions (PRD scale) | 150,000 → 140,000 (14 days) | 4 | 139 ms |
+
+10× the rows, same time: the cut is partition drops (O(days)), not row deletes. Row deletes only happen for
+projects whose retention is shorter than the largest one (bounded by those days).

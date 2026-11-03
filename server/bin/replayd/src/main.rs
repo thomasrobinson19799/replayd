@@ -74,6 +74,8 @@ async fn main() -> anyhow::Result<()> {
             .context("ensuring partitions")?;
     }
     spawn_partitions(pool.clone());
+    // retention (§5.8): daily 03:00 Asia/Tehran
+    let _retention = replayd_storage::retention::spawn(pool.clone(), cfg.data_dir.clone());
 
     let projects = Arc::new(ProjectCache::default());
     let n = projects.reload(&pool).await.context("loading projects")?;

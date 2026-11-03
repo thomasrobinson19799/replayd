@@ -45,7 +45,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 |---|---|---|---|
 | T-31 | Issue status: resolve / next release / ignore / regression | done | Migration 0002 (ignore_until_count, regressed_at); transitions in the issue upsert + Regression signal (D-23); PATCH single + bulk with RBAC + audit; dashboard status bar (resolve, resolve in next release, ignore forever / 1 h / 24 h / 7 d / next 10 / 100 events, reopen) and list bulk actions. Tests: pipeline issue_status_db, RBAC HTTP matrix, dashboard status.test, e2e/issue-status.e2e.mjs. |
 | T-32 | Telegram alerts per project | done | replayd-alerts: signal consumer, new/regression/spike, dedup 30 min (memory + alerts_sent), 20 msg/min per chat, 3 retries with retry_after, HTML message with issue + replay links, token never logged (D-24). Settings page tabs (General, Keys & DSN, Members, Telegram + test message, Fingerprint rules). Tests: unit (dedup, rate limit, spike window, message, retries/no token), e2e/alerts.e2e.mjs against a mock Bot API (8/8). |
-| T-33 | Retention: partitions + disk cleanup | todo | |
+| T-33 | Retention: partitions + disk cleanup | done | storage::retention (daily 03:00 Tehran): partition drops below the largest retention, per-project row deletes for shorter ones, issues past cut-off, day dirs + deleted projects, source maps 30 days after last event (D-25). Tests: retention_db (16-day seed → 14/7 days, idempotent); bench 150k-session 15-day seed → 14 days in 139 ms (same as 15k: O(days)). |
 | T-34 | Remote config editor in dashboard | todo | |
 | T-35 | Viewer-role redaction of bodies/frames | todo | |
 

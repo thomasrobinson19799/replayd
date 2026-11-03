@@ -1,6 +1,7 @@
 //! replayd-storage: `.rpl` shard writers, session aggregator, replay ingest sink, disk retention.
 
 pub mod aggregator;
+pub mod retention;
 pub mod sink;
 pub mod writer;
 
