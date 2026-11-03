@@ -1,0 +1,8 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#131722}.chart-gui-wrapper{position:relative;width:100%;height:380px}canvas{position:absolute;inset:0;width:100%;height:100%}</style></head>
+<body><div class="chart-gui-wrapper"><canvas id="pane"></canvas><canvas id="cross"></canvas></div>
+<div class="toolbar"><button>1m</button><button>5m</button><button>1h</button><button>D</button></div>
+<script>
+const c = document.getElementById('pane'); c.width = 800; c.height = 380; const g = c.getContext('2d');
+let x = 0; setInterval(() => { g.fillStyle = '#131722'; g.fillRect(0,0,800,380); g.strokeStyle = '#2962ff'; g.beginPath();
+for (let i = 0; i < 800; i += 4) g.lineTo(i, 190 + Math.sin((i + x) / 30) * 80); g.stroke(); x += 5; }, 250);
+</script></body></html>

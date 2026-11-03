@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terminal mock</title>
+<link rel="stylesheet" href="terminal.css">
+<!--SDK-->
+</head>
+<body>
+<header id="top"></header>
+<main>
+  <section id="watchlist" class="panel"><h2>Watchlist</h2><table><thead><tr><th>Symbol</th><th>Bid</th><th>Ask</th><th>Spread</th><th>Chg</th><th>Time</th></tr></thead><tbody></tbody></table></section>
+  <section id="chart" class="panel"><iframe id="tv" src="tv.html" title="chart"></iframe></section>
+  <section id="orderpanel" class="panel"></section>
+  <section id="orderbook" class="panel"><h2>Order book</h2><div class="bids"></div><div class="asks"></div></section>
+  <section id="positions" class="panel"><h2>Positions</h2><table><tbody></tbody></table></section>
+  <section id="history" class="panel"><h2>History</h2><table><tbody></tbody></table></section>
+</main>
+<footer id="status">connecting…</footer>
+<script src="terminal.js"></script>
+</body>
+</html>

@@ -6,7 +6,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 ## M0 — Risks retired, skeleton green
 | ID | Task | Status | Notes / blockers |
 |---|---|---|---|
-| T-01 | Spike: rrweb record cost on terminal mock | todo | |
+| T-01 | Spike: rrweb record cost on terminal mock | done | docs/spikes/T-01.md. rrweb 2.2.0 ≈23 KB gz. throttle → mutation-prefilter hook (D-04), rrweb taint fix (D-05). **Open risk:** per-batch p95 ≈5 ms at 4× on mock (budget 2 ms) → T-20 must close. |
 | T-02 | Spike: TradingView v27 canvas capture | skipped | Out of scope v1 (D-01) |
 | T-03 | Spike: CapacitorHttp + fetch/XHR patch | todo | |
 | T-04 | Spike: WP Rocket exclusion | todo | |

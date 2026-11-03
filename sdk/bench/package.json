@@ -1,0 +1,14 @@
+{
+  "name": "@replayd/bench",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "spike:t01": "node spikes/t01-rrweb-cost.mjs"
+  },
+  "devDependencies": {
+    "@rrweb/record": "2.2.0",
+    "esbuild": "0.25.12",
+    "playwright": "1.63.0",
+    "ws": "8.18.3"
+  }
+}

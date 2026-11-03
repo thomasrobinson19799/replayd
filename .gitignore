@@ -1,0 +1,11 @@
+node_modules/
+dist/
+target/
+.output/
+.nuxt/
+.env
+*.log
+coverage/
+/data/
+sdk/bench/spikes/t04/out-*.html
+sdk/bench/results/
