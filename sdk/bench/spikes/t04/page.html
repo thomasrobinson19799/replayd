@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Broker site (WP Rocket Delay JS)</title>
+<script src="/spikes/t04/vendor-jquery-like.js" id="jquery-core-js"></script>
+<script>window.themeConfig = { ok: true };</script>
+<script src="/_rp/sdk/1.0.0/replayd.min.js" id="replayd-js" data-dsn="https://pk_test@replay.example.com/fxglory-site" data-release="wp-1.0" defer></script>
+</head>
+<body>
+<h1>Open an account</h1>
+<button id="cta">Start trading</button>
+<script>
+  // theme code with a bug: throws on load (runs only after interaction when delayed)
+  document.addEventListener('DOMContentLoaded', function () { window.__themeRan = performance.now(); undefinedThemeFn(); });
+</script>
+<script src="/spikes/t04/analytics-like.js"></script>
+</body>
+</html>
