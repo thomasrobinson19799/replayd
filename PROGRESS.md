@@ -60,18 +60,27 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 
 ## Continue in a new session (paste this prompt)
 ```
-You are continuing the "replayd" project in this repo (branch claude/sweet-clarke-h5srzw).
+You are continuing the "replayd" project in this repo (branches claude/sweet-clarke-h5srzw and
+claude/brave-turing-2e28k0 are kept identical; push to both).
 Read PRD.md (including the Decisions log at the end), AGENTS.md and PROGRESS.md, then `git log --oneline | head -30`.
-Continue from the first task in PROGRESS.md that is not `done`/`skipped`, milestone by milestone (M2 → M5) without
+Continue from the first task in PROGRESS.md that is not `done`/`skipped`, milestone by milestone through M5, without
 stopping between milestones. Follow AGENTS.md rules and the owner's working agreement in it (per task: implement →
 tests → checks → commit "T-xx: <title>" → tick PROGRESS.md → push). Record deviations in the PRD Decisions log and
-numbers in docs/bench.md. Environment notes: start Docker with `nohup dockerd >/tmp/dockerd.log 2>&1 &` if it is not
-running; `make db` starts Postgres 17 + Atlas migrations on :55432; `make test`, `make up` (stack on :8088),
-`scripts/bench-server.sh`, `scripts/crash-test.sh`, `node e2e/issues.e2e.mjs` (E2E_ADMIN_PASSWORD may need to match
-the existing admin). Before stopping for any reason: commit, push, and update this section if the workflow changed.
+numbers in docs/bench.md. Never loosen a budget (D-20 is the owner's explicit exception for the 4× batch figure).
+Environment notes:
+- Docker: `nohup dockerd >/tmp/dockerd.log 2>&1 &` if not running. Docker Hub may answer 429: pull from
+  mirror.gcr.io and retag (postgres:17, nginx:1.29.8-alpine, node:22-alpine, arigaio/atlas:1.3.6).
+- `make db` (Postgres 17 + Atlas on :55432), `make test`, `make up` (stack on :8088, admin password change-me-now →
+  E2E_ADMIN_PASSWORD=change-me-now). After server/dashboard changes: `make images` + compose up again.
+- The replayd image is distroless (uid 65532): never `docker cp` into /data without `-a` + chown 65532.
+- e2e (stack up, `pnpm -C sdk build`): e2e/issues, player (60-min fixture via gen-replay.mjs INSTALL=1),
+  sdk-replay, capacitor, sourcemaps (*.e2e.mjs). SDK perf: `node sdk/bench/perf/replay.mjs` (slow: ~6 min per
+  scenario at REPEAT=3; set CATS=devtools.timeline,disabled-by-default-devtools.timeline for snapshot timing).
+Before stopping for any reason: commit, push, and update this section if the workflow changed.
 ```
 
 ## Session log
+- 2026-11-03: M2 complete (T-20…T-23), M3 complete (T-25, T-26, T-30; T-24 skipped). Owner accepted the measured 4× per-batch figure (D-20). Snapshot budget open on this VM (T-51).
 - 2026-11-03: M1 complete (T-12…T-18). M2: T-21 done early (server-only, no conflicts). GitHub push access fixed by owner.
 - 2026-11-03: M0 complete (T-01, T-03, T-04, T-10, T-11). Push to GitHub blocked (403: Claude GitHub App has no write access to thomasrobinson19799/replayd); commits are local until access is fixed.
 - 2026-11-03: repo bootstrapped (PRD.md, AGENTS.md, CLAUDE.md, PROGRESS.md). Env: Rust 1.97, Node 22, pnpm, Docker 29 (dockerd must be started manually in the cloud sandbox: `nohup dockerd &`), postgres:17 + arigaio/atlas images available.
