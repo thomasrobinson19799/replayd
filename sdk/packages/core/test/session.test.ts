@@ -16,18 +16,24 @@ describe('session manager (PRD §4.5)', () => {
   it('creates a session when storage is missing and persists it in sessionStorage', async () => {
     const s = await load();
     const onNew = vi.fn();
-    const a = s.sInit(false, onNew);
-    expect(onNew).toHaveBeenCalledTimes(1);
+    s.sInit(false, onNew);
+    expect(sessionStorage.getItem('rp_s')).toBeNull(); // lazy: no storage access in init
+    const a = s.sess();
+    expect(onNew).not.toHaveBeenCalled(); // first load is not a rollover
     expect(a.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(JSON.parse(sessionStorage.getItem('rp_s')!).id).toBe(a.id);
     expect(localStorage.getItem('rp_s')).toBeNull();
   });
 
   it('resumes the stored session across reloads', async () => {
-    const a = (await load()).sInit(false, () => {});
+    const s1 = await load();
+    s1.sInit(false, () => {});
+    const a = s1.sess();
     vi.advanceTimersByTime(60_000);
     const onNew = vi.fn();
-    const b = (await load()).sInit(false, onNew);
+    const s2 = await load();
+    s2.sInit(false, onNew);
+    const b = s2.sess();
     expect(b.id).toBe(a.id);
     expect(onNew).not.toHaveBeenCalled();
   });
@@ -35,19 +41,21 @@ describe('session manager (PRD §4.5)', () => {
   it('rolls over after > 15 min idle', async () => {
     const s = await load();
     const onNew = vi.fn();
-    const a = s.sInit(false, onNew);
+    s.sInit(false, onNew);
+    const a = s.sess();
     vi.advanceTimersByTime(14 * 60_000);
     s.act();
     expect(s.sess().id).toBe(a.id);
     vi.advanceTimersByTime(15 * 60_000 + 1);
     s.act();
     expect(s.sess().id).not.toBe(a.id);
-    expect(onNew).toHaveBeenCalledTimes(2);
+    expect(onNew).toHaveBeenCalledTimes(1);
   });
 
   it('rolls over after 60 min even when active', async () => {
     const s = await load();
-    const a = s.sInit(false, () => {});
+    s.sInit(false, () => {});
+    const a = s.sess();
     for (let i = 0; i < 12; i++) {
       vi.advanceTimersByTime(5 * 60_000);
       s.act();
@@ -61,12 +69,14 @@ describe('session manager (PRD §4.5)', () => {
   it('rolls over when the stored session is corrupt', async () => {
     sessionStorage.setItem('rp_s', '{"id":"x","st":"nope"}');
     const s = await load();
-    expect(s.sInit(false, () => {}).id).not.toBe('x');
+    s.sInit(false, () => {});
+    expect(s.sess().id).not.toBe('x');
   });
 
   it('throttles activity writes to storage', async () => {
     const s = await load();
     s.sInit(false, () => {});
+    s.sess();
     const stored = () => JSON.parse(sessionStorage.getItem('rp_s')!).la;
     const la0 = stored();
     for (let i = 0; i < 100; i++) {
@@ -81,7 +91,9 @@ describe('session manager (PRD §4.5)', () => {
   });
 
   it('uses localStorage under Capacitor', async () => {
-    const a = (await load()).sInit(true, () => {});
+    const s = await load();
+    s.sInit(true, () => {});
+    const a = s.sess();
     expect(JSON.parse(localStorage.getItem('rp_s')!).id).toBe(a.id);
     expect(sessionStorage.getItem('rp_s')).toBeNull();
   });
@@ -118,7 +130,8 @@ describe('session manager (PRD §4.5)', () => {
       throw new Error('QuotaExceeded');
     });
     const s = await load();
-    expect(s.sInit(false, () => {}).id).toHaveLength(36);
+    s.sInit(false, () => {});
+    expect(s.sess().id).toHaveLength(36);
     expect(() => s.act()).not.toThrow();
   });
 });
@@ -132,7 +145,9 @@ describe('uuid7', () => {
     for (const id of ids) expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     const ms = parseInt(ids[0]!.replace(/-/g, '').slice(0, 12), 16);
     expect(Math.abs(ms - t)).toBeLessThan(1000);
-    expect([...ids].sort()).toEqual(ids); // monotonic within the page (per-ms counter)
+    // "monotonic-ish": ordered by the ms prefix (random order within one ms)
+    const prefixes = ids.map((id) => id.slice(0, 13));
+    expect([...prefixes].sort()).toEqual(prefixes);
     expect(new Set(ids).size).toBe(ids.length);
   });
 });

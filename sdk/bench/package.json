@@ -5,7 +5,9 @@
   "scripts": {
     "spike:t01": "node spikes/t01-rrweb-cost.mjs",
     "spike:t03-sdk": "node spikes/t03/run-sdk.mjs",
-    "bench": "node perf/run.mjs"
+    "bench": "node perf/run.mjs",
+    "bench:ws": "node perf/ws-gate.mjs",
+    "bench:init": "node perf/init.mjs"
   },
   "devDependencies": {
     "@rrweb/record": "2.2.0",

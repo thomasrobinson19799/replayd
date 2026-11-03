@@ -32,7 +32,8 @@ export const resetFlood = () => {
 
 type Lv = ReplaydEvent['level'];
 type Src = ReplaydEvent['source'];
-export const isErr = (x: unknown): x is Error => x instanceof Error || typeof (x as Error)?.stack == 'string';
+/** duck-typed (cross-realm safe): every engine we support gives Errors a string stack */
+export const isErr = (x: unknown): x is Error => typeof (x as Error)?.stack == 'string';
 
 /**
  * Captures one error/warning. `subj` = request / socket URL used for `denyUrls` when there's no stack.

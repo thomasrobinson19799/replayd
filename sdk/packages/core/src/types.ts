@@ -141,7 +141,7 @@ export interface Internal {
   /** main-thread transport fetch (CapacitorWebFetch ?? original fetch) */
   fetch: typeof fetch;
   /** queue a body for upload with retry/backoff */
-  send: (kind: string, body: Uint8Array) => void;
+  send: (kind: string, body: Uint8Array | ArrayBuffer) => void;
   /** internal error counter */
   ie: () => number;
   /** session counters for segment meta */
@@ -151,8 +151,9 @@ export interface Internal {
 
 export interface Resolved extends ReplaydOptions {
   replay: ReplayOptions & { sampleRate: number; networkDetailAllowUrls: Matcher[] };
+  /** `channelOf` (default 'centrifugo-json') and `sample.outgoing` (default 'all') are defaulted by their consumers */
   websocket: Required<Pick<WebSocketOptions, 'enabled' | 'urls'>> &
-    WebSocketOptions & { sample: Required<NonNullable<WebSocketOptions['sample']>> };
+    WebSocketOptions & { sample: NonNullable<WebSocketOptions['sample']> & { perChannelPerSec: number; maxFramesPerSec: number; maxFrameBytes: number } };
   errors: Required<ErrorOptions>;
   redact: Required<RedactOptions>;
 }

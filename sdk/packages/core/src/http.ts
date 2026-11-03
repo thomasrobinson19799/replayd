@@ -8,7 +8,7 @@ import { O, absu, own } from './config';
 import { capture } from './errors';
 import { crumb, rec } from './ring';
 import { rHeaders, rText, rUrl } from './redact';
-import { W, after, ctor, err, match, now, wrapf } from './u';
+import { W, after, ctor, err, match, now, pnow, since, wrapf } from './u';
 
 type X = Record<string, unknown>;
 
@@ -23,7 +23,7 @@ const detail = (u: string) => {
     u,
   );
 };
-const textual = (ct: string | null) => /json|text|xml|urlencoded|javascript|graphql/i.test(ct ?? '') && !/event-stream/i.test(ct!);
+const textual = (ct: string | null) => /json|text|xml|urlencoded/i.test(ct ?? '') && !/event-stream/i.test(ct!);
 
 /** records a finished request: `network` ring/replay event, breadcrumb, failed-status error event */
 const net = (m: string, url: string, status: number, ts: number, ms: number, x: X = {}) => {
@@ -55,7 +55,7 @@ const read = async (r: Response, cap: number) => {
 };
 
 const fetched = (m: string, u: string, r: Response, ts: number, t0: number, n: RequestInit | undefined, rq: Request | 0) => {
-  const ms = Math.round(performance.now() - t0), x: X = {}, h = r.headers, cl = h.get('content-length');
+  const ms = since(t0), x: X = {}, h = r.headers, cl = h.get('content-length');
   if (cl) x.resSize = +cl;
   if (req(x, u, n?.body, () => new Headers(n?.headers ?? (rq ? rq.headers : undefined)) as never)) {
     x.resHeaders = rHeaders(h as never);
@@ -85,7 +85,7 @@ type XHR = XMLHttpRequest & { [K]?: XR } & Record<string, any>;
 const xdone = (x: XHR) => {
   const r = x[K]!;
   if (own(r.u)) return;
-  const ms = Math.round(performance.now() - r.t), z: X = {}, cl = x.getResponseHeader('content-length');
+  const ms = since(r.t), z: X = {}, cl = x.getResponseHeader('content-length');
   if (cl) z.resSize = +cl;
   if (req(z, r.u, r.b, () => r.h)) {
     z.resHeaders = rHeaders(x.getAllResponseHeaders().trim().split(/[\r\n]+/).map((l) => l.split(/: (.*)/)) as never);
@@ -98,7 +98,7 @@ const xdone = (x: XHR) => {
 // open: start a record (t0 here so sync XHR works too), one loadend listener per instance
 const xo = (_r: unknown, a: IArguments, x: XHR) => {
   const o = x[K];
-  x[K] = { m: String(a[0]).toUpperCase(), u: absu(String(a[1])), h: [], t: performance.now(), ts: now() };
+  x[K] = { m: String(a[0]).toUpperCase(), u: absu(String(a[1])), h: [], t: pnow(), ts: now() };
   if (!o) x.addEventListener('loadend', () => x[K] && xdone(x));
 };
 const xh = (_r: unknown, a: IArguments, x: XHR) => x[K]?.h.push([a[0], a[1]]);
@@ -107,12 +107,12 @@ const xs = (_r: unknown, a: IArguments, x: XHR) => x[K] && (x[K].b = a[0]);
 export const httpHooks = () => {
   after(W, 'fetch', (p: Promise<Response>, a: IArguments) => {
     const i = a[0], n: RequestInit | undefined = a[1], rq = i instanceof Request ? i : 0;
-    const u = absu(rq ? rq.url : String(i)), ts = now(), t0 = performance.now();
+    const u = absu(rq ? rq.url : String(i)), ts = now(), t0 = pnow();
     const m = (n?.method || (rq && rq.method) || 'GET').toUpperCase();
     if (!own(u))
       p.then(
         (r) => fetched(m, u, r, ts, t0, n, rq),
-        () => net(m, u, 0, ts, Math.round(performance.now() - t0)),
+        () => net(m, u, 0, ts, since(t0)),
       ).catch(err);
   });
   const B = W.CapacitorWebXMLHttpRequest;

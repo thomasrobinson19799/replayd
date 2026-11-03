@@ -4,12 +4,12 @@
  * 4xx dropped, X-Replayd-Disable honoured on any response. Error events are batched every 2 s / 10.
  */
 import type { ReplaydEvent } from './types';
-import { iurl } from './config';
+import { iurl, ready } from './config';
 import { W, en, err, off } from './u';
 
 interface Q {
   k: string;
-  b: Uint8Array;
+  b: Uint8Array | ArrayBuffer;
   n: number;
   f?: boolean;
 }
@@ -55,7 +55,7 @@ const go = (it: Q, ka: boolean) => {
             tm = 0;
             pump();
           },
-          ra > 0 ? Math.min(ra * 1e3, 36e5) : Math.min(6e4, 500 * 2 ** it.n),
+          ra > 0 ? ra * 1e3 : Math.min(6e4, 500 * 2 ** it.n),
         );
         return;
       }
@@ -67,6 +67,7 @@ const go = (it: Q, ka: boolean) => {
 
 /** sends the queue head (sequential); on hide: everything not in flight, keepalive within 60 KB total */
 export const pump = (hide?: boolean) => {
+  ready();
   if (!en || (!hide && (fl || tm))) return;
   let ka = KA;
   for (const it of q) {
@@ -80,7 +81,7 @@ export const pump = (hide?: boolean) => {
 };
 
 /** queue a body for upload; drops oldest entries above 5 MB */
-export const send = (k: string, b: Uint8Array) => {
+export const send = (k: string, b: Uint8Array | ArrayBuffer) => {
   if (!en) return;
   q.push({ k, b, n: 0 });
   qb += b.byteLength;
@@ -88,8 +89,7 @@ export const send = (k: string, b: Uint8Array) => {
   pump();
 };
 
-export const gzip = (s: string) =>
-  new Response(new Blob([s]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer().then((b) => new Uint8Array(b));
+export const gzip = (s: string) => new Response(new Blob([s]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
 
 let ev: ReplaydEvent[] = [], et: ReturnType<typeof setTimeout> | 0 = 0;
 /** queue an error event: flushed every 2 s or at 10 events (cap 100 pending, drop oldest) */
@@ -99,15 +99,18 @@ export const pushEv = (e: ReplaydEvent) => {
   else et ||= setTimeout(flushEv, 2e3);
 };
 
-/** gzip + send pending events. `sync` (page hide): plain JSON, no await (server sniffs gzip magic). */
-export const flushEv = (sync?: boolean) => {
+/**
+ * gzip + send pending events. `sync` (page hide): plain JSON, sent before the function's first await
+ * (server sniffs the gzip magic, D-09).
+ */
+export const flushEv = async (sync?: boolean) => {
   clearTimeout(et);
   et = 0;
-  if (!ev.length) return Promise.resolve();
+  if (!ev.length) return;
   const j = JSON.stringify(ev);
   ev = [];
-  if (sync) return send('events', new TextEncoder().encode(j)), Promise.resolve();
-  return gzip(j).then((b) => send('events', b), err);
+  if (sync) send('events', new TextEncoder().encode(j));
+  else await gzip(j).then((b) => send('events', b), err);
 };
 
 /** drop everything (kill switch / close) */

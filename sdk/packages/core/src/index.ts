@@ -1,21 +1,21 @@
 /** @replayd/core — public API (PRD §4.1). `init()` is synchronous, < 1 ms, and never throws. */
 import type { Breadcrumb, Internal, ReplaydEvent, ReplaydOptions, User } from './types';
 import { loaders } from './chunks';
-import { O, applyRc, cachedRc, dsn, fetchRc, iurl, resolve, stale } from './config';
+import { O, dsn, fetchRc, iurl, ready, resolve, stale } from './config';
 import { consoleHooks, navHooks } from './console';
 import { capture, ctx, errHandlers, fromErr, isErr, platform, resetFlood, ser, setOnErr, setPlatform, setUser as su, tags } from './errors';
 import { httpHooks } from './http';
 import { crumb, drain, rec, resetRing, setSink } from './ring';
 import { act, nextSeq, sInit, sSave, sampled, sess } from './session';
 import { flushEv, hdr, pump, reset, send, setTf, tf } from './transport';
-import { W, en, ie, offUntil, on, setOk, un } from './u';
+import { W, en, ie, offT, on, setOk, un } from './u';
+import { resetWs, wsHooks, wsc } from './ws';
 
 export type * from './types';
 export { loaders };
 export const SDK_VERSION: string = __RP_VERSION__;
 
 let started = false;
-const c = { ws_disc: 0 };
 
 const I: Internal = {
   o: () => O,
@@ -29,16 +29,15 @@ const I: Internal = {
   fetch: (a, b) => tf.call(W, a, b),
   send,
   ie: () => ie,
-  c,
-  get platform() {
-    return platform;
-  },
+  c: wsc,
+  platform: 'web',
 };
 
 /** PRD §4.4 step 2: after load → idle: remote config, sample check, lazy chunks */
 const start = async () => {
   try {
-    const cc = cachedRc();
+    const cc = ready();
+    if (Date.now() < offT) return; // X-Replayd-Disable window: no requests at all
     if (stale(cc)) {
       const p = fetchRc(tf, hdr);
       if (!cc) await p;
@@ -59,9 +58,9 @@ const hide = () => {
 
 export function init(options: ReplaydOptions): void {
   try {
-    if (started || !W.document || offUntil() > Date.now()) return;
+    if (started || !W.document) return;
     const cap = !!W.Capacitor?.isNativePlatform?.();
-    setPlatform(cap ? 'capacitor-android' : 'web');
+    setPlatform((I.platform = cap ? 'capacitor-android' : 'web'));
     resolve(options);
     dsn(options.dsn, options.tunnel, cap);
     started = true;
@@ -70,20 +69,19 @@ export function init(options: ReplaydOptions): void {
     sInit(cap, () => {
       resetRing();
       resetFlood();
-      c.ws_disc = 0;
+      resetWs();
     });
     setOk(true);
-    const cc = cachedRc();
-    if (cc) applyRc(cc.c);
     errHandlers();
     consoleHooks();
     httpHooks();
     navHooks();
+    wsHooks();
     for (const e of ['pointerdown', 'keydown', 'scroll']) on(W, e, act);
     on(W, 'pagehide', hide);
     on(W.document, 'visibilitychange', () => W.document.visibilityState == 'hidden' && hide());
     const go = () => (W.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 1)))(start, { timeout: 2e3 });
-    if (W.document.readyState == 'complete') go();
+    if (W.document.readyState == 'complete') setTimeout(go); // registering rIC costs ~0.1 ms cold: not inside init()
     else on(W, 'load', go, { once: true });
   } catch {
     /* invalid DSN etc. — SDK stays off, app unaffected */

@@ -38,16 +38,19 @@ describe('init', () => {
     expect(u.en).toBe(false);
   });
 
-  it('respects a persisted X-Replayd-Disable until-timestamp (no patches at all)', async () => {
+  it('respects a persisted X-Replayd-Disable until-timestamp: no requests, capture off (read lazily, off the init path)', async () => {
     localStorage.setItem('rp_off', String(Date.now() + 60_000));
     const f = mockFetch();
     core = await load();
+    const getItem = vi.spyOn(Storage.prototype, 'getItem');
     core.init({ dsn: DSN });
+    expect(getItem).not.toHaveBeenCalled(); // no storage access inside init()
+    core.captureMessage('before the kill switch was read');
+    await core.flush(); // first upload attempt reads it
     const u = await import('../src/u');
     expect(u.en).toBe(false);
-    expect(u.un.length).toBe(0);
-    await new Promise((r) => setTimeout(r, 20));
-    expect(f).not.toHaveBeenCalled();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(f).not.toHaveBeenCalled(); // neither the event nor the remote config
   });
 
   it('loads nothing replay-related before load + idle, then config → sample check → replay chunk', async () => {
@@ -59,19 +62,24 @@ describe('init', () => {
       ric = f;
       return 1;
     });
-    core = await load();
-    vi.spyOn(core.loaders, 'replay').mockImplementation(() => {
-      order.push('replay');
-      return Promise.resolve({ startReplay: () => {} });
-    });
-    const cap = vi.spyOn(core.loaders, 'capacitor');
-    core.init({ dsn: DSN });
-    expect(order).toEqual([]);
-    expect(ric).toBeDefined();
-    ric!();
-    await vi.waitFor(() => expect(order).toEqual(['config', 'replay']));
-    expect(cap).not.toHaveBeenCalled();
-    delete (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback;
+    try {
+      core = await load();
+      vi.spyOn(core.loaders, 'replay').mockImplementation(() => {
+        order.push('replay');
+        return Promise.resolve({ startReplay: () => {} });
+      });
+      const cap = vi.spyOn(core.loaders, 'capacitor');
+      core.init({ dsn: DSN });
+      expect(order).toEqual([]);
+      await vi.waitFor(() => expect(ric).toBeDefined()); // registered from a task right after init()
+      await new Promise((r) => setTimeout(r, 20));
+      expect(order).toEqual([]); // still nothing until the idle callback runs
+      ric!();
+      await vi.waitFor(() => expect(order).toEqual(['config', 'replay']));
+      expect(cap).not.toHaveBeenCalled();
+    } finally {
+      delete (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback;
+    }
   });
 
   it('skips the replay chunk when the session is not sampled', async () => {

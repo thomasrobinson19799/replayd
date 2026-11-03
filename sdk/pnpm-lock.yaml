@@ -29,6 +29,9 @@ importers:
       size-limit:
         specifier: 14.3.0
         version: 14.3.0
+      terser:
+        specifier: 5.51.2
+        version: 5.51.2
       typescript:
         specifier: 6.0.3
         version: 6.0.3

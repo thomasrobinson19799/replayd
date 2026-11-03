@@ -29,18 +29,20 @@ export const consoleHooks = () => {
     });
 };
 
+/** raw previous href; redacted only when a navigation is recorded */
 let last = '';
 const nav = () => {
-  const u = rUrl(W.location.href);
-  if (u != last) {
-    crumb('nav', u, { from: last });
-    rec('nav', { from: last, to: u });
-    last = u;
+  const h = W.location.href;
+  if (h != last) {
+    const u = rUrl(h), from = rUrl(last);
+    crumb('nav', u, { from });
+    rec('nav', { from, to: u });
+    last = h;
   }
 };
 
 export const navHooks = () => {
-  last = rUrl(W.location.href);
+  last = W.location.href;
   after(W.history, 'pushState', nav);
   after(W.history, 'replaceState', nav);
   on(W, 'popstate', nav);

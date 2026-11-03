@@ -114,28 +114,30 @@ describe('remote config fetch + cache', () => {
     expect(O.websocket.sample.maxFramesPerSec).toBe(7);
   });
 
-  it('uses a fresh cache synchronously at init and does not refetch', async () => {
+  it('uses a fresh cache (applied at load+idle) and does not refetch', async () => {
     localStorage.setItem('rp_cfg', JSON.stringify({ t: Date.now() - 60_000, c: remote }));
     const f = mockFetch();
     core = await load();
     core.init({ dsn: DSN });
     const { O } = await import('../src/config');
-    expect(O.websocket.sample.maxFramesPerSec).toBe(7);
+    await vi.waitFor(() => expect(O.websocket.sample.maxFramesPerSec).toBe(7));
     await new Promise((r) => setTimeout(r, 20));
     expect(f.mock.calls.filter((c) => String(c[0]).includes('/config')).length).toBe(0);
   });
 
   it('uses a stale cache immediately and refreshes in the background', async () => {
     localStorage.setItem('rp_cfg', JSON.stringify({ t: Date.now() - 11 * 60_000, c: remote }));
-    const f = mockFetch(() =>
-      Promise.resolve(res(200, {}, JSON.stringify({ ...remote, ws: { maxFramesPerSec: 9 } }))),
+    let release!: () => void;
+    const f = mockFetch(
+      () => new Promise((ok) => (release = () => ok(res(200, {}, JSON.stringify({ ...remote, ws: { maxFramesPerSec: 9 } }))))),
     );
     core = await load();
     core.init({ dsn: DSN });
     const { O } = await import('../src/config');
-    expect(O.websocket.sample.maxFramesPerSec).toBe(7);
+    await vi.waitFor(() => expect(f).toHaveBeenCalledTimes(1));
+    expect(O.websocket.sample.maxFramesPerSec).toBe(7); // stale value in use while refreshing
+    release();
     await vi.waitFor(() => expect(O.websocket.sample.maxFramesPerSec).toBe(9));
-    expect(f).toHaveBeenCalledTimes(1);
   });
 
   it('remote kill switch disables capture', async () => {
@@ -143,6 +145,7 @@ describe('remote config fetch + cache', () => {
     mockFetch();
     core = await load();
     core.init({ dsn: DSN });
+    await core.flush();
     const u = await import('../src/u');
     expect(u.en).toBe(false);
   });

@@ -1,6 +1,6 @@
 /** Options resolution, DSN/ingest URLs, remote config merge + cache (PRD §4.2, §4.12, D-09). */
 import type { RedactOptions, ReplaydOptions, Resolved } from './types';
-import { W, now, setRcOff, sget, sset } from './u';
+import { W, now, offUntil, setRcOff, sget, sset } from './u';
 
 export let O: Resolved;
 
@@ -29,38 +29,35 @@ export const resolve = (o: ReplaydOptions) => {
   const w = o.websocket ?? {};
   O = {
     ...o,
-    replay: { sampleRate: 1, networkDetailAllowUrls: [], networkCaptureBodies: true, ...o.replay },
+    replay: { sampleRate: 1, networkDetailAllowUrls: [], ...o.replay },
     websocket: {
       enabled: true,
       urls: [/centrifugo/, /\/connection\/websocket/],
-      channelOf: 'centrifugo-json',
       ...w,
-      sample: { perChannelPerSec: 1, maxFramesPerSec: 20, maxFrameBytes: 2048, outgoing: 'all', ...w.sample },
+      sample: { perChannelPerSec: 1, maxFramesPerSec: 20, maxFrameBytes: 2048, ...w.sample },
     },
     errors: { sampleRate: 1, console: ['error', 'warn'], failedRequestStatusCodes: [[400, 599]], ignoreErrors: [], denyUrls: [], ...o.errors },
-    redact: { headers: [], bodyKeys: [], queryParams: [] },
+    redact: { headers: [...RD.headers], bodyKeys: [...RD.bodyKeys], queryParams: [...RD.queryParams] },
   };
-  extend(RD);
   extend(o.redact);
 };
 
 /** ingest endpoint base (D-09): tunnel (web only) or `<dsn origin>/ingest/<pid>/` */
 let base = '', abs = '', key = '';
+// plain string slicing: a cold `new URL()` costs ~0.1–0.2 ms on the init() path
 export const dsn = (d: string, tunnel: string | undefined, cap: boolean) => {
-  const u = new URL(d);
-  const p = u.pathname.replace(/\/+$/, '');
-  const i = p.lastIndexOf('/');
-  const pid = p.slice(i + 1);
-  if (!pid || !u.username) throw 0;
-  key = encodeURIComponent(decodeURIComponent(u.username));
-  base = tunnel && !cap ? `${tunnel.replace(/\/+$/, '')}/${pid}/` : `${u.origin}${p.slice(0, i)}/ingest/${pid}/`;
-  abs = absu(base);
+  const s = d.indexOf('//') + 2, at = d.indexOf('@', s), p = d.indexOf('/', at), i = d.lastIndexOf('/');
+  const pid = d.slice(i + 1);
+  if (s < 3 || at < s + 1 || p < at + 2 || !pid) throw 0;
+  key = d.slice(s, at);
+  base = tunnel && !cap ? `${tunnel.endsWith('/') ? tunnel.slice(0, -1) : tunnel}/${pid}/` : `${d.slice(0, s)}${d.slice(at + 1, i)}/ingest/${pid}/`;
+  abs = '';
 };
 export const iurl = (kind: string) => `${base}${kind}?key=${key}`;
 /** absolute URL (relative to the page; under Capacitor that is https://localhost) */
 export const absu = (u: string) => new URL(u, W.location.href).href;
 /** true for the SDK's own ingest URLs (never captured) */
-export const own = (u: string) => absu(u).startsWith(abs);
+export const own = (u: string) => absu(u).startsWith((abs ||= absu(base)));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type A = any;
@@ -73,7 +70,6 @@ const take = (t: A, s: A, ks: string[]) => {
 export const applyRc = (c: A) => {
   if (!c || typeof c != 'object') return;
   take(O.replay, c.replay, ['sampleRate']);
-  take((O.replay.canvas ??= {}), c.canvas, ['enabled', 'fps', 'maxWidth', 'quality']);
   take(O.websocket, c.ws, ['enabled']);
   take(O.websocket.sample, c.ws, ['perChannelPerSec', 'maxFramesPerSec']);
   take(O.errors, c.errors, ['sampleRate']);
@@ -84,6 +80,18 @@ export const applyRc = (c: A) => {
 const CK = 'rp_cfg';
 /** cached remote config `{t, c}` (localStorage, 10 min or `ttl`) */
 export const cachedRc = (): { t: number; c: A } | null => sget(1, CK);
+let cc0: { t: number; c: A } | null | undefined;
+/**
+ * First localStorage access (~0.5 ms cold in Chromium), deliberately kept off the init() path: applies the
+ * persisted X-Replayd-Disable and the cached remote config. Runs before the first upload and at load+idle.
+ */
+export const ready = () => {
+  if (cc0 === undefined) {
+    offUntil();
+    applyRc((cc0 = cachedRc())?.c);
+  }
+  return cc0;
+};
 export const stale = (cc: { t: number; c: A } | null) => !cc || now() - cc.t > (+cc.c?.ttl || 600) * 1e3;
 
 /** fetches remote config, caches + applies it. Network failures are ignored (local config stays). */

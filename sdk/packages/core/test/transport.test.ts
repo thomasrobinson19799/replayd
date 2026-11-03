@@ -163,7 +163,7 @@ describe('transport (retry, backoff, Retry-After, drop, disable)', () => {
     await vi.advanceTimersByTimeAsync(1);
     vi.useRealTimers();
     await vi.waitFor(() => expect(f).toHaveBeenCalledTimes(1));
-    const b = f.mock.calls[0]![1]!.body as Uint8Array;
+    const b = new Uint8Array(f.mock.calls[0]![1]!.body as ArrayBuffer);
     expect([b[0], b[1]]).toEqual([0x1f, 0x8b]);
     expect(JSON.parse(await gunzip(b)).map((e: ReplaydEvent) => e.id)).toEqual(['0', '1', '2']);
     for (let i = 0; i < 10; i++) t.pushEv(ev(i));

@@ -2,6 +2,8 @@
  * Shared internals. Size note: module-level bindings minify, object property names don't —
  * keep hot/shared state in `let`s here, mutate only through the setters below.
  */
+import { wsCfg } from './ws';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const W: any = globalThis;
 export const now = () => Date.now();
@@ -17,13 +19,12 @@ export const err = () => {
  * Patched functions stay installed but become pass-through while `en` is false.
  */
 export let en = false;
-let ok = false, rcOff = false, offT = 0, offTm: ReturnType<typeof setTimeout> | 0 = 0;
-const hooks: (() => void)[] = [];
-/** registers a callback run whenever capture state / config changes (bounded: modules only) */
-export const onUpd = (f: () => void) => hooks.push(f);
+let ok = false, rcOff = false;
+export let offT = 0;
+/** recomputes `en` (and the WS gate, which folds `en` into its threshold) */
 export const upd = () => {
   en = ok && !rcOff && now() >= offT;
-  for (const f of hooks) f();
+  wsCfg();
 };
 export const setOk = (v: boolean) => {
   ok = v;
@@ -39,34 +40,44 @@ export const off = (s: number) => {
   if (!(s > 0)) return;
   offT = now() + s * 1e3;
   sset(1, OFF_KEY, offT);
-  clearTimeout(offTm);
-  offTm = setTimeout(upd, Math.min(s * 1e3, 2 ** 31 - 1));
+  // upd() recomputes from offT, so an early fire (setTimeout overflow) is harmless
+  setTimeout(upd, s * 1e3);
   upd();
 };
-/** reads the persisted disable-until timestamp (ms) */
-export const offUntil = (): number => (offT = Math.max(offT, +(sget(1, OFF_KEY) ?? 0) || 0));
+/** applies the persisted disable-until timestamp (ms) */
+export const offUntil = () => {
+  offT = +sget(1, OFF_KEY) || 0;
+  upd();
+};
 
 /** storage: 1 = localStorage, 0 = sessionStorage. Never throws (blocked storage, quota, bad JSON). */
+const st = (l: 0 | 1): Storage => W[l ? 'localStorage' : 'sessionStorage'];
 export const sget = (l: 0 | 1, k: string) => {
   try {
-    return JSON.parse(W[l ? 'localStorage' : 'sessionStorage'].getItem(k));
+    return JSON.parse(st(l).getItem(k)!);
   } catch {
     return null;
   }
 };
 export const sset = (l: 0 | 1, k: string, v: unknown) => {
   try {
-    W[l ? 'localStorage' : 'sessionStorage'].setItem(k, JSON.stringify(v));
+    st(l).setItem(k, JSON.stringify(v));
   } catch {
     /* storage unavailable */
   }
 };
+export const pnow = () => performance.now();
+/** whole ms since a performance.now() mark */
+export const since = (t0: number) => Math.round(pnow() - t0);
 
 /** teardown list for close(): restores patches, removes listeners */
 export const un: (() => void)[] = [];
 type L = (e: never) => unknown;
-/** addEventListener with a try/catch'd handler (never throws into the app); removed on close() */
-export const on = (t: EventTarget, e: string, f: L, o: AddEventListenerOptions | boolean = { capture: true, passive: true }) => {
+/**
+ * addEventListener with a try/catch'd handler (never throws into the app); removed on close() unless
+ * `keep` (per-socket listeners die with their socket — registering them would leak).
+ */
+export const on = (t: EventTarget, e: string, f: L, o: AddEventListenerOptions | boolean = { capture: true, passive: true }, keep?: 1) => {
   const g = (x: Event) => {
     try {
       f(x as never);
@@ -75,7 +86,7 @@ export const on = (t: EventTarget, e: string, f: L, o: AddEventListenerOptions |
     }
   };
   t.addEventListener(e, g, o);
-  un.push(() => t.removeEventListener(e, g, o));
+  if (!keep) un.push(() => t.removeEventListener(e, g, o));
 };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type F = (...a: any[]) => any;
@@ -112,14 +123,15 @@ export const after = (o: any, k: string, f: Parameters<typeof wrapf>[1]) => patc
  * so subclasses work and calling without `new` still throws), then runs f(instance) if enabled.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const ctor = (k: string, f: (x: any) => void) =>
+export const ctor = (k: string, f: (x: any, a: IArguments) => void) =>
   patch(W, k, (N) => {
     const C = function (this: unknown) {
       // eslint-disable-next-line prefer-rest-params
       const x = Reflect.construct(N, arguments, new.target);
       if (en)
         try {
-          f(x);
+          // eslint-disable-next-line prefer-rest-params
+          f(x, arguments);
         } catch {
           err();
         }
@@ -128,35 +140,22 @@ export const ctor = (k: string, f: (x: any) => void) =>
     statics(C, N);
     return C;
   });
-/** copies own statics (constants, length, name) of a native constructor onto its wrapper */
+/**
+ * Wrapper inherits the native's statics (CONNECTING/OPEN/…, DONE, …) through its own prototype chain,
+ * and shares its `prototype` so `instanceof` keeps working.
+ */
 export const statics = (w: F, n: F) => {
-  for (const k of Reflect.ownKeys(n))
-    if (k != 'prototype')
-      try {
-        Object.defineProperty(w, k, Object.getOwnPropertyDescriptor(n, k)!);
-      } catch {
-        /* non-configurable */
-      }
+  Object.setPrototypeOf(w, n);
   w.prototype = n.prototype;
 };
 
-let lt = 0, lc = 0;
-/** UUIDv7: 48-bit ms timestamp, 12-bit per-ms counter (monotonic within a page), 62 random bits */
+/** UUIDv7 (RFC 9562): 48-bit ms timestamp + version/variant + 74 random bits; sorts by ms */
 export const uuid7 = (): string => {
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  let t = now();
-  if (t > lt) {
-    lt = t;
-    lc = ((b[6]! & 7) << 8) | b[7]!; // random start, leaves headroom for the counter
-  } else if (++lc > 4095) {
-    t = ++lt;
-    lc = 0;
-  } else t = lt;
-  for (let i = 0; i < 6; i++) b[i] = (t / 2 ** (40 - 8 * i)) & 255;
-  b[6] = 112 | (lc >> 8);
-  b[7] = lc & 255;
-  b[8] = (b[8]! & 63) | 128;
+  const b = crypto.getRandomValues(new Uint8Array(16)), t = now();
   let s = '';
+  for (let i = 0; i < 6; i++) b[i] = (t / 2 ** (40 - 8 * i)) & 255;
+  b[6] = 112 | (b[6]! & 15);
+  b[8] = 128 | (b[8]! & 63);
   for (let i = 0; i < 16; i++) s += (i == 4 || i == 6 || i == 8 || i == 10 ? '-' : '') + (b[i]! + 256).toString(16).slice(1);
   return s;
 };

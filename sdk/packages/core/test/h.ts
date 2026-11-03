@@ -22,7 +22,7 @@ export function mockFetch(impl: (url: string, init?: RequestInit) => Promise<Res
 }
 
 export async function gunzip(b: unknown): Promise<string> {
-  const u8 = b as Uint8Array;
+  const u8 = b instanceof ArrayBuffer ? new Uint8Array(b) : (b as Uint8Array);
   if (u8[0] !== 0x1f || u8[1] !== 0x8b) return new TextDecoder().decode(u8);
   const s = new Blob([u8 as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'));
   return new Response(s).text();
