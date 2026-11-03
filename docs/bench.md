@@ -229,3 +229,9 @@ projects whose retention is shorter than the largest one (bounded by those days)
 | | nuxt (`@replayd/nuxt`) | 1 / 1, source vue, component OrderPanel, release from app_version |
 
 Sizes (`pnpm size`): @replayd/vue 302 B, @replayd/react 436 B, @replayd/nuxt plugin 416 B (≤ 1 KB each), core IIFE 6.96 KB.
+
+### WordPress plugin — T-41 (local)
+`e2e/wordpress.e2e.mjs` (WordPress 6.8 + MySQL 8.4 in Docker, plugin configured with wp-cli, SDK served cross-origin):
+tag first in `<head>` (`defer`, data-* config, no inline script) ✔, error thrown on `DOMContentLoaded` before any
+interaction arrives ✔, click error arrives ✔, replay session recorded with release `wp-1.0.0` ✔. Staging fxglory.com
+with WP Rocket: pending access.

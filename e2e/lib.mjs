@@ -45,13 +45,13 @@ export function serve({ dir, routes = {} }) {
       if (path in routes) {
         const v = routes[path];
         const body = typeof v === 'function' ? v() : v.startsWith('/') ? await readFile(v) : v;
-        res.writeHead(200, { 'content-type': types[extname(path)] ?? 'text/html' });
+        res.writeHead(200, { 'content-type': types[extname(path)] ?? 'text/html', 'access-control-allow-origin': '*' });
         return res.end(body);
       }
       if (!dir) throw new Error('404');
       const p = normalize(join(dir, path === '/' ? 'index.html' : path));
       if (!p.startsWith(dir)) throw new Error('403');
-      res.writeHead(200, { 'content-type': types[extname(p)] ?? 'application/octet-stream' });
+      res.writeHead(200, { 'content-type': types[extname(p)] ?? 'application/octet-stream', 'access-control-allow-origin': '*' });
       res.end(await readFile(p));
     } catch {
       res.writeHead(404).end();

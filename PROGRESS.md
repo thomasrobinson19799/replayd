@@ -53,7 +53,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | ID | Task | Status | Notes / blockers |
 |---|---|---|---|
 | T-40 | `@replayd/nuxt`, `@replayd/vue`, `@replayd/react`, IIFE build | done | Vue errorHandler chain (component + info), React root handler + ErrorBoundary, Nuxt module + client plugin (runtime config, app_version release, self/apiHost, chained handler + app:error), IIFE data-attribute auto-init; core dedups already-reported errors (D-28). examples/{html,vue,react,nuxt} + e2e/adapters.e2e.mjs: each app → exactly 1 issue with adapter context. Adapters 302/436/416 B. |
-| T-41 | `replayd-wp` plugin | todo | |
+| T-41 | `replayd-wp` plugin | blocked | Plugin done and verified locally: wordpress/replayd-wp (settings page, first-in-head `defer` tag with data-* config, no inline script, WP Rocket filters per D-08, uninstall). PHP unit tests (25 checks, `docker run php:8.3-cli php wordpress/replayd-wp/tests/run.php`) + e2e/wordpress.e2e.mjs on real WordPress 6.8: tag first in head, error before interaction + click error arrive, replay recorded. **Blocked:** acceptance needs the staging fxglory.com install (no access); WP Rocket real-code run on the WP page not repeated here (T-04 covers the same patterns). |
 | T-50 | Observability: metrics, JSON logs, Grafana JSON, alert rules | todo | |
 | T-51 | Benchmarks vs Sentry config, real-device APK checklist | todo | |
 | T-52 | Migration: replace Sentry in 3 terminals + sites | todo | |
