@@ -13,10 +13,12 @@
     "preview": "nuxt preview",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "test": "vitest run"
   },
   "dependencies": {
     "@pinia/nuxt": "1.0.3",
+    "@rrweb/replay": "2.2.0",
     "nuxt": "4.6.4",
     "pinia": "4.1.0",
     "vue": "3.5.44",
@@ -29,6 +31,7 @@
     "eslint": "10.14.0",
     "tailwindcss": "4.3.4",
     "typescript": "6.0.3",
+    "vitest": "5.1.0",
     "vue-tsc": "3.3.14"
   },
   "pnpm": {

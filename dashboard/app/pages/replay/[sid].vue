@@ -1,15 +1,449 @@
 <script setup lang="ts">
+import { Replayer } from '@rrweb/replay'
+import '@rrweb/replay/dist/style.css'
+import type { SessionDetail } from '~/utils/types'
+import type { DecodeMsg, DecodeStart } from '~/workers/decode'
+import { clock, collect, emptyPanels, lastAtOrBefore, sortPanels, type Marker, type Panels, type RrEvent } from '~/utils/replay'
+
 const route = useRoute()
-const sid = computed(() => String(route.params.sid))
+const api = useApi()
+const config = useRuntimeConfig()
+const sid = computed(() => route.params.sid as string)
+
+const session = ref<SessionDetail | null>(null)
+const error = ref('')
+const status = ref('Loading…')
+const playing = ref(false)
+const speed = ref(1)
+const skipInactive = ref(true)
+const startTs = ref(0)
+const endTs = ref(0)
+const cur = ref(0) // absolute ms of the playhead
+const panels = shallowRef<Panels>(emptyPanels())
+const panelsVersion = ref(0)
+const tab = ref<'console' | 'network' | 'errors' | 'crumbs' | 'device'>('console')
+const loaded = reactive({ frames: 0, bytes: 0, total: null as number | null, done: false })
+
+const stage = ref<HTMLElement | null>(null)
+const host = ref<HTMLElement | null>(null)
+let replayer: Replayer | null = null
+let worker: Worker | null = null
+let pending: RrEvent[] = []
+let timer: ReturnType<typeof setInterval> | undefined
+const scale = ref(1)
+
+const total = computed(() => Math.max(0, endTs.value - startTs.value))
+const offset = computed(() => Math.max(0, cur.value - startTs.value))
+
+function fit() {
+  if (!replayer || !stage.value) return
+  const w = replayer.wrapper
+  const iframe = replayer.iframe
+  const vw = Number(iframe.width) || iframe.clientWidth
+  const vh = Number(iframe.height) || iframe.clientHeight
+  if (!vw || !vh) return
+  const s = Math.min(stage.value.clientWidth / vw, stage.value.clientHeight / vh, 1)
+  scale.value = s
+  w.style.transform = `scale(${s})`
+  w.style.transformOrigin = 'top left'
+}
+
+function seekTo(abs: number) {
+  if (!replayer) return
+  const t = Math.min(Math.max(0, abs - startTs.value), total.value)
+  if (playing.value) replayer.play(t)
+  else replayer.pause(t)
+  cur.value = startTs.value + t
+}
+
+function toggle() {
+  if (!replayer) return
+  if (playing.value) {
+    replayer.pause()
+    playing.value = false
+  }
+  else {
+    const t = offset.value >= total.value - 50 ? 0 : offset.value
+    replayer.play(t)
+    playing.value = true
+  }
+}
+
+watch(speed, s => replayer?.setConfig({ speed: s }))
+watch(skipInactive, v => replayer?.setConfig({ skipInactive: v }))
+
+function startReplayer(events: RrEvent[]) {
+  if (!host.value) return
+  events.sort((a, b) => a.timestamp - b.timestamp)
+  startTs.value = events[0]!.timestamp
+  replayer = new Replayer(events as never, {
+    root: host.value,
+    speed: speed.value,
+    skipInactive: skipInactive.value,
+    showWarning: false,
+    showDebug: false,
+    mouseTail: false,
+    triggerFocus: false,
+    UNSAFE_replayCanvas: false,
+    insertStyleRules: [],
+  })
+  replayer.on('fullsnapshot-rebuilded', () => {
+    const w = window as unknown as { __rpFirstFrameMs?: number }
+    w.__rpFirstFrameMs ??= Math.round(performance.now())
+    fit()
+  })
+  replayer.on('resize', () => nextTick(fit))
+  replayer.on('finish', () => {
+    playing.value = false
+  })
+  const t = Number(route.query.t)
+  if (Number.isFinite(t) && t > startTs.value) {
+    replayer.play(t - startTs.value)
+  }
+  else {
+    replayer.play(0)
+  }
+  playing.value = true
+  status.value = ''
+  timer = setInterval(() => {
+    if (!replayer) return
+    cur.value = startTs.value + replayer.getCurrentTime()
+  }, 100)
+}
+
+function onFrame(m: Extract<DecodeMsg, { type: 'frame' }>) {
+  loaded.frames++
+  const evs = m.events as RrEvent[]
+  endTs.value = Math.max(endTs.value, m.t1, ...evs.slice(-1).map(e => e.timestamp))
+  const p = panels.value
+  collect(evs, p)
+  if (m.flags & 1) p.markers.push({ ts: m.t0, kind: 'gap', label: 'segment gap' })
+  sortPanels(p)
+  panelsVersion.value++
+  if (replayer) {
+    for (const e of evs) replayer.addEvent(e as never)
+    return
+  }
+  pending.push(...evs)
+  // playback can start as soon as we have meta + a full snapshot
+  if (pending.some(e => e.type === 2) && pending.some(e => e.type === 4)) {
+    const evsAll = pending
+    pending = []
+    startReplayer(evsAll)
+  }
+}
+
+async function load() {
+  try {
+    session.value = await api.get<SessionDetail>(`/sessions/${sid.value}`)
+    const s = session.value
+    startTs.value = s.started_at
+    endTs.value = s.last_at
+    for (const e of s.errors) {
+      panels.value.markers.push({ ts: e.ts, kind: e.level === 'warning' ? 'warning' : 'error', label: e.title })
+    }
+    worker = new Worker(new URL('../../workers/decode.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = (ev: MessageEvent<DecodeMsg>) => {
+      const m = ev.data
+      if (m.type === 'frame') onFrame(m)
+      else if (m.type === 'progress') {
+        loaded.bytes = m.bytes
+        loaded.total = m.total
+      }
+      else if (m.type === 'done') {
+        loaded.done = true
+        if (!replayer) status.value = pending.length ? 'Recording has no full snapshot yet.' : 'No replay data for this session.'
+      }
+      else if (m.type === 'error') {
+        status.value = ''
+        error.value = m.message.includes('404') ? 'No replay recorded for this session.' : m.message
+      }
+    }
+    const start: DecodeStart = {
+      url: new URL(`${config.public.apiBase}/sessions/${sid.value}/recording`, location.origin).toString(),
+      rewriteFrom: s.asset_rewrite_from ?? [],
+      assetBase: s.asset_base_url,
+    }
+    worker.postMessage(start)
+  }
+  catch (e) {
+    status.value = ''
+    error.value = errorMessage(e)
+  }
+}
+
+// side panel indices synced to the playhead
+const idx = computed(() => {
+  void panelsVersion.value
+  const p = panels.value
+  const t = cur.value
+  return {
+    console: lastAtOrBefore(p.console, t),
+    network: lastAtOrBefore(p.network, t),
+    errors: lastAtOrBefore(p.errors, t),
+    crumbs: lastAtOrBefore(p.crumbs, t),
+  }
+})
+const lists = computed(() => {
+  void panelsVersion.value
+  return { ...panels.value }
+})
+const markers = computed<Marker[]>(() => {
+  void panelsVersion.value
+  return panels.value.markers
+})
+const markerColor: Record<string, string> = {
+  error: 'bg-red-500', warning: 'bg-amber-400', ws: 'bg-purple-500', nav: 'bg-sky-400', app: 'bg-emerald-500', gap: 'bg-gray-500',
+}
+
+function onScrub(e: MouseEvent) {
+  const el = e.currentTarget as HTMLElement
+  const r = el.getBoundingClientRect()
+  seekTo(startTs.value + ((e.clientX - r.left) / r.width) * total.value)
+}
+
+const consoleColor = (l: string) => (l === 'error' ? 'text-red-600' : l === 'warn' ? 'text-amber-600' : 'text-gray-700')
+
+onMounted(() => {
+  load()
+  window.addEventListener('resize', fit)
+})
+onBeforeUnmount(() => {
+  clearInterval(timer)
+  worker?.terminate()
+  replayer?.destroy()
+  window.removeEventListener('resize', fit)
+})
 </script>
 
 <template>
-  <section>
-    <h1 class="text-2xl font-semibold">
-      Replay {{ sid }}
-    </h1>
-    <p class="mt-2 text-sm text-gray-500">
-      Replay player — coming in T-23.
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-wrap items-baseline gap-3 text-sm">
+      <NuxtLink
+        v-if="session"
+        :to="`/projects/${session.project_slug}/sessions`"
+        class="text-gray-500 hover:underline"
+      >
+        ← Sessions
+      </NuxtLink>
+      <h1 class="text-lg font-semibold">
+        Replay
+      </h1>
+      <template v-if="session">
+        <span class="text-gray-600">{{ session.user_id ?? session.user_email ?? 'anonymous' }}</span>
+        <span class="text-gray-500">{{ dateTime(session.started_at) }} · {{ duration(session.duration_ms) }} · {{ platformLabel(session.platform) }}</span>
+        <span
+          v-if="!loaded.done && loaded.bytes"
+          class="text-xs text-gray-400"
+        >loading {{ Math.round(loaded.bytes / 1024) }} KB<template v-if="loaded.total"> / {{ Math.round(loaded.total / 1024) }} KB</template></span>
+      </template>
+    </div>
+    <p
+      v-if="error"
+      class="text-sm text-red-600"
+    >
+      {{ error }}
     </p>
-  </section>
+
+    <div class="grid gap-3 lg:grid-cols-[1fr_380px]">
+      <div class="flex min-w-0 flex-col gap-2">
+        <div
+          ref="stage"
+          class="relative h-[60vh] overflow-hidden rounded border border-gray-200 bg-gray-100"
+          data-testid="replay-stage"
+        >
+          <div
+            ref="host"
+            class="replayer-host"
+          />
+          <p
+            v-if="status"
+            class="absolute inset-0 flex items-center justify-center text-sm text-gray-500"
+          >
+            {{ status }}
+          </p>
+        </div>
+
+        <!-- timeline with markers -->
+        <div
+          class="relative h-6 cursor-pointer rounded bg-gray-200"
+          data-testid="timeline"
+          @click="onScrub"
+        >
+          <div
+            class="absolute inset-y-0 left-0 rounded bg-gray-400/60"
+            :style="{ width: `${total ? (offset / total) * 100 : 0}%` }"
+          />
+          <span
+            v-for="(m, i) in markers"
+            :key="i"
+            class="absolute top-0 h-6 w-1 -translate-x-1/2 rounded"
+            :class="markerColor[m.kind]"
+            :style="{ left: `${total ? Math.min(100, Math.max(0, ((m.ts - startTs) / total) * 100)) : 0}%` }"
+            :title="`${clock(m.ts - startTs)} ${m.label}`"
+            @click.stop="seekTo(m.ts - 1000)"
+          />
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+          <button
+            class="w-20 rounded bg-gray-900 px-3 py-1 text-white disabled:opacity-40"
+            :disabled="!startTs"
+            data-testid="play-toggle"
+            @click="toggle"
+          >
+            {{ playing ? 'Pause' : 'Play' }}
+          </button>
+          <span class="tabular-nums">{{ clock(offset) }} / {{ clock(total) }}</span>
+          <select
+            v-model.number="speed"
+            class="rounded border border-gray-300 bg-white px-1 py-0.5"
+          >
+            <option
+              v-for="s in [1, 2, 4, 8]"
+              :key="s"
+              :value="s"
+            >
+              {{ s }}×
+            </option>
+          </select>
+          <label class="flex items-center gap-1"><input
+            v-model="skipInactive"
+            type="checkbox"
+          > Skip inactivity</label>
+          <span class="ml-auto flex gap-2 text-xs text-gray-500">
+            <span><i class="inline-block h-2 w-2 rounded-full bg-red-500" /> error</span>
+            <span><i class="inline-block h-2 w-2 rounded-full bg-amber-400" /> warning</span>
+            <span><i class="inline-block h-2 w-2 rounded-full bg-purple-500" /> WS</span>
+            <span><i class="inline-block h-2 w-2 rounded-full bg-sky-400" /> nav</span>
+            <span><i class="inline-block h-2 w-2 rounded-full bg-emerald-500" /> app</span>
+            <span><i class="inline-block h-2 w-2 rounded-full bg-gray-500" /> gap</span>
+          </span>
+        </div>
+      </div>
+
+      <aside class="flex h-[calc(60vh+4.5rem)] flex-col rounded border border-gray-200 bg-white text-xs">
+        <nav class="flex border-b border-gray-200">
+          <button
+            v-for="t in (['console', 'network', 'errors', 'crumbs', 'device'] as const)"
+            :key="t"
+            class="flex-1 px-2 py-2 capitalize"
+            :class="tab === t ? 'border-b-2 border-gray-900 font-semibold' : 'text-gray-500'"
+            @click="tab = t"
+          >
+            {{ t === 'crumbs' ? 'Breadcrumbs' : t }}
+            <span
+              v-if="t !== 'device'"
+              class="text-gray-400"
+            >{{ lists[t].length }}</span>
+          </button>
+        </nav>
+        <div class="min-h-0 flex-1">
+          <VirtualList
+            v-if="tab === 'console'"
+            :items="lists.console"
+            :active-index="idx.console"
+          >
+            <template #default="{ item, index }">
+              <div
+                class="flex cursor-pointer gap-2 truncate border-b border-gray-50 px-2 leading-6"
+                :class="[consoleColor(item.level), index > idx.console ? 'opacity-40' : '']"
+                :title="item.text"
+                @click="seekTo(item.ts)"
+              >
+                <span class="w-10 shrink-0 text-gray-400">{{ clock(item.ts - startTs) }}</span>
+                <span class="truncate font-mono">{{ item.text }}</span>
+              </div>
+            </template>
+          </VirtualList>
+          <VirtualList
+            v-else-if="tab === 'network'"
+            :items="lists.network"
+            :active-index="idx.network"
+          >
+            <template #default="{ item, index }">
+              <div
+                class="flex cursor-pointer gap-2 border-b border-gray-50 px-2 leading-6"
+                :class="index > idx.network ? 'opacity-40' : ''"
+                :title="JSON.stringify(item.detail).slice(0, 2000)"
+                @click="seekTo(item.ts)"
+              >
+                <span class="w-10 shrink-0 text-gray-400">{{ clock(item.ts - startTs) }}</span>
+                <span class="w-10 shrink-0 font-semibold">{{ item.method }}</span>
+                <span
+                  class="w-8 shrink-0"
+                  :class="item.status >= 400 || item.status === 0 ? 'text-red-600' : 'text-green-700'"
+                >{{ item.status || 'ERR' }}</span>
+                <span class="flex-1 truncate font-mono">{{ shortUrl(item.url) }}</span>
+                <span class="shrink-0 text-gray-400">{{ item.duration }} ms</span>
+              </div>
+            </template>
+          </VirtualList>
+          <VirtualList
+            v-else-if="tab === 'errors'"
+            :items="lists.errors"
+            :active-index="idx.errors"
+          >
+            <template #default="{ item, index }">
+              <div
+                class="flex cursor-pointer gap-2 truncate border-b border-gray-50 px-2 leading-6"
+                :class="[item.level === 'warning' ? 'text-amber-700' : 'text-red-600', index > idx.errors ? 'opacity-40' : '']"
+                :title="item.title"
+                @click="seekTo(item.ts - 1000)"
+              >
+                <span class="w-10 shrink-0 text-gray-400">{{ clock(item.ts - startTs) }}</span>
+                <span class="truncate">{{ item.title }}</span>
+              </div>
+            </template>
+          </VirtualList>
+          <VirtualList
+            v-else-if="tab === 'crumbs'"
+            :items="lists.crumbs"
+            :active-index="idx.crumbs"
+          >
+            <template #default="{ item, index }">
+              <div
+                class="flex cursor-pointer gap-2 truncate border-b border-gray-50 px-2 leading-6"
+                :class="index > idx.crumbs ? 'opacity-40' : ''"
+                :title="item.msg"
+                @click="seekTo(item.ts)"
+              >
+                <span class="w-10 shrink-0 text-gray-400">{{ clock(item.ts - startTs) }}</span>
+                <span class="w-14 shrink-0 text-gray-500">{{ item.cat }}</span>
+                <span class="truncate">{{ item.msg }}</span>
+              </div>
+            </template>
+          </VirtualList>
+          <dl
+            v-else-if="session"
+            class="divide-y divide-gray-100"
+          >
+            <div
+              v-for="[k, v] in ([
+                ['platform', platformLabel(session.platform)], ['app version', session.app_version], ['device', session.device_model],
+                ['android', session.os_version], ['webview', session.webview_version], ['browser', `${session.browser ?? ''} ${session.browser_ver ?? ''}`],
+                ['os', session.os], ['viewport', session.vw ? `${session.vw}×${session.vh}` : null], ['language', session.lang],
+                ['release', session.release], ['environment', session.environment], ['user', session.user_id ?? session.user_email],
+                ['entry', session.entry_url], ['segments', session.segments], ['size', `${Math.round(session.bytes / 1024)} KB`],
+                ['ws disconnects', session.ws_disconnects], ['gaps', session.has_gap ? 'yes' : 'no'], ['session id', session.id],
+              ] as [string, unknown][]).filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')"
+              :key="k"
+              class="flex gap-3 px-3 py-1.5"
+            >
+              <dt class="w-24 shrink-0 text-gray-500">
+                {{ k }}
+              </dt>
+              <dd class="break-all">
+                {{ v }}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </aside>
+    </div>
+  </div>
 </template>
+
+<style>
+.replayer-host .replayer-wrapper { position: absolute; top: 0; left: 0; }
+.replayer-host iframe { border: 0; background: white; }
+</style>

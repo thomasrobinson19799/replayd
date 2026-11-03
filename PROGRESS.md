@@ -27,10 +27,10 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 ## M2 — Full replays with console/network
 | ID | Task | Status | Notes / blockers |
 |---|---|---|---|
-| T-20 | SDK replay chunk: lazy load, rrweb, worker, segments, page-hide flush | todo | |
+| T-20 | SDK replay chunk: lazy load, rrweb, worker, segments, page-hide flush | todo | Was being built by a background agent in a local worktree when the session ended; that work was NOT pushed. Restart T-20 from scratch per PRD + docs/spikes/T-01.md (design + open-risk plan). |
 | T-21 | Server: replay ingest, shard writers, fsync, dedup, aggregator | done | storage crate: replay ingest sink (meta parse only, never decompresses), sharded writer threads with bounded queues (503 when full), O_APPEND + writev, LRU 2k fds / 60 s idle close, group fdatasync 1 s, seq-bitset dedup, file day from UUIDv7 sid; session aggregator (delta upserts every 3 s via COPY staging, ended after 15 min, UA parsed once). Crash test PASS (2/2371 lost, acked 3 ms before kill). 2k segments/s p99 3.0 ms, RSS 63 MB. |
 | T-22 | Dashboard: sessions list + filters | done | API: GET /api/projects/:pid/sessions (all §5.11 filters, 14-day partition window, keyset 50/page), GET /api/sessions/:sid (meta + error events), GET /api/sessions/:sid/recording (Range, ETag). Dashboard sessions page (filters in URL, load more). 140k seed: worst p95 77 ms (URL no-match), typical 4–7 ms. |
-| T-23 | Dashboard: player, decode worker, timeline, tabs | todo | |
+| T-23 | Dashboard: player, decode worker, timeline, tabs | wip | Committed WIP: dashboard/app/utils/rpl.ts (streaming .rpl parser, tested vs /fixtures/wire), workers/decode.ts, utils/replay.ts, components/VirtualList.vue, pages/replay/[sid].vue (rrweb Replayer, timeline markers, console/network/errors/breadcrumbs/device tabs). NOT yet run through lint/typecheck/build. Remaining: fix lint/type errors, 60-min session fixture generator + Playwright test (< 1 s to first frame, progressive), commit as T-23. |
 
 ## M3 — WebSocket, APK, source maps
 | ID | Task | Status | Notes / blockers |
