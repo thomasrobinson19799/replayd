@@ -1,0 +1,10 @@
+<!doctype html>
+<!-- Plain HTML / WordPress-style: the IIFE with config in data-* attributes (D-08: no inline script needed).
+     Served by replayd under /_rp/sdk/<version>/ in production; here next to the page. -->
+<html lang="en"><head><meta charset="utf-8"><title>replayd example: html</title>
+<script src="/replayd.min.js" data-dsn="__DSN__" data-release="html-1.0.0" data-environment="example" defer></script>
+</head><body>
+<h1>Plain HTML</h1>
+<button id="buy">Buy</button>
+<script>document.getElementById('buy').addEventListener('click', function placeOrder() { null.price; });</script>
+</body></html>

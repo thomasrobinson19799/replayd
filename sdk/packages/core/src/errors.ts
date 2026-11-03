@@ -94,8 +94,11 @@ export const capture = (level: Lv, source: Src, type: string, message: string, s
   }
 };
 
-export const fromErr = (x: Error, source: Src, level: Lv = 'error', c?: Record<string, unknown>) =>
-  capture(level, source, x.name || 'Error', String(x.message), x.stack, c);
+/** Error objects already reported: a framework handler that also logs the error must not report it twice */
+export const seen = new WeakSet<object>();
+export const fromErr = (x: Error, source: Src, level: Lv = 'error', c?: Record<string, unknown>) => (
+  seen.add(x), capture(level, source, x.name || 'Error', String(x.message), x.stack, c)
+);
 
 /**
  * Safe stringify for console args / non-Error values: depth 3, 1 KB, circular-safe, never throws.

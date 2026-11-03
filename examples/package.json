@@ -1,0 +1,7 @@
+{
+  "name": "replayd-examples",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "pnpm": { "onlyBuiltDependencies": ["esbuild"] }
+}

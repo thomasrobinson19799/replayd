@@ -1,7 +1,7 @@
 /** Console, history and click instrumentation (PRD §4.11). console.time/timeEnd are never patched. */
 import type { ConsoleLevel } from './types';
 import { O } from './config';
-import { capture, desc, isErr, ser } from './errors';
+import { capture, desc, isErr, seen, ser } from './errors';
 import { crumb, rec } from './ring';
 import { rUrl } from './redact';
 import { W, after, on } from './u';
@@ -19,8 +19,9 @@ export const consoleHooks = () => {
         const m = s.join(' ');
         rec('console', { level: l, args: s });
         crumb('console', m, { level: l });
-        if (O.errors.console.includes(l)) {
-          const e = [...a].find(isErr);
+        const e = [...a].find(isErr);
+        // already reported by a framework handler (also when wrapped, e.g. NuxtError with `cause`)
+        if (O.errors.console.includes(l) && !(e && (seen.has(e) || seen.has((e as { cause?: object }).cause!)))) {
           capture(l == 'error' ? 'error' : 'warning', 'console', e ? e.name || 'Error' : `console.${l}`, m, e?.stack);
         }
       } finally {

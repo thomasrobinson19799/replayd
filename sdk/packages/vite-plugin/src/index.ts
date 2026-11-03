@@ -5,7 +5,7 @@
  * builds), and fails the build on upload errors only with `failOnError`.
  */
 import { join } from 'node:path';
-import { uploadSourcemaps } from '../../cli/src/upload';
+import { uploadSourcemaps } from '@replayd/cli';
 
 export interface ReplaydViteOptions {
   url?: string;

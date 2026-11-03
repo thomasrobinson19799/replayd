@@ -1,0 +1,8 @@
+{
+  "name": "replayd-example-vue",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "vite build" },
+  "dependencies": { "@replayd/core": "link:../../sdk/packages/core", "@replayd/vue": "link:../../sdk/packages/vue", "vue": "3.5.44" },
+  "devDependencies": { "@vitejs/plugin-vue": "6.0.10", "vite": "8.3.5" }
+}

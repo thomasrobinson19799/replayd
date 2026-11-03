@@ -5,5 +5,5 @@
   { "name": "worker", "path": "packages/core/dist/worker.js", "limit": "4 KB", "gzip": true, "brotli": false },
   { "name": "@replayd/vue", "path": "packages/vue/dist/index.js", "limit": "1 KB", "gzip": true, "brotli": false },
   { "name": "@replayd/react", "path": "packages/react/dist/index.js", "limit": "1 KB", "gzip": true, "brotli": false },
-  { "name": "@replayd/nuxt (runtime plugin)", "path": "packages/nuxt/dist/index.js", "limit": "1 KB", "gzip": true, "brotli": false }
+  { "name": "@replayd/nuxt (runtime plugin)", "path": "packages/nuxt/dist/runtime/plugin.client.js", "limit": "1 KB", "gzip": true, "brotli": false }
 ]

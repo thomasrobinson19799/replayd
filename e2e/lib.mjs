@@ -35,7 +35,7 @@ export async function login() {
   return { cookies, csrf, api };
 }
 
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.map': 'application/json' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.map': 'application/json', '.css': 'text/css', '.json': 'application/json' };
 
 /** Serves `routes` ({ '/path': absolute file | string content }) plus files under `dir`. */
 export function serve({ dir, routes = {} }) {

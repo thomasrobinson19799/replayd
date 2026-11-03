@@ -1,0 +1,8 @@
+{
+  "name": "replayd-example-react",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "vite build" },
+  "dependencies": { "@replayd/core": "link:../../sdk/packages/core", "@replayd/react": "link:../../sdk/packages/react", "react": "19.3.1", "react-dom": "19.3.1" },
+  "devDependencies": { "@vitejs/plugin-react": "6.2.1", "vite": "8.3.5" }
+}

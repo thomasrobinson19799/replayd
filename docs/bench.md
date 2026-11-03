@@ -217,3 +217,15 @@ projects whose retention is shorter than the largest one (bounded by those days)
 | 2026-11-03 | change saved in the dashboard → served by `/ingest/:pid/config` | 4 ms (project cache reloaded on save), `v` 1 → 2 |
 | | APK within the 10-min TTL | keeps cached config, no request |
 | | APK after 10 min | 1 request (revalidated, `no-cache`), new `ws.maxFramesPerSec` applied |
+
+### Adapters — T-40
+`e2e/adapters.e2e.mjs`: each example app built against a fresh project, one click on Buy.
+
+| Date | App | Result |
+|---|---|---|
+| 2026-11-03 | html (IIFE, data attributes) | 1 issue / 1 event, source onerror, release html-1.0.0 |
+| | vue (`ReplaydVue`) | 1 / 1, source vue, component OrderPanel |
+| | react (`ErrorBoundary` + `reactErrorHandler`) | 1 / 1, source react, component stack, fallback rendered |
+| | nuxt (`@replayd/nuxt`) | 1 / 1, source vue, component OrderPanel, release from app_version |
+
+Sizes (`pnpm size`): @replayd/vue 302 B, @replayd/react 436 B, @replayd/nuxt plugin 416 B (≤ 1 KB each), core IIFE 6.96 KB.

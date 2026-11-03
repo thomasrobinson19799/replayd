@@ -3,7 +3,7 @@ import type { Breadcrumb, Internal, ReplaydEvent, ReplaydOptions, User } from '.
 import { loaders } from './chunks';
 import { O, dsn, fetchRc, iurl, ready, resolve, stale } from './config';
 import { consoleHooks, navHooks } from './console';
-import { capture, ctx, errHandlers, fromErr, isErr, platform, resetFlood, ser, setOnErr, setPlatform, setUser as su, tags, user } from './errors';
+import { capture, ctx, errHandlers, fromErr, isErr, platform, resetFlood, seen, ser, setOnErr, setPlatform, setUser as su, tags, user } from './errors';
 import { httpHooks } from './http';
 import { crumb, drain, rec, resetRing, setSink } from './ring';
 import { act, nextSeq, sInit, sSave, sampled, sess } from './session';
@@ -104,7 +104,9 @@ export interface CaptureHint {
 export function captureException(error: unknown, hint: CaptureHint = {}): void {
   try {
     const { level = 'error', source = 'manual', ctx: x } = hint;
-    if (isErr(error)) fromErr(error, source, level, x);
+    if (isErr(error)) {
+      if (!seen.has(error)) fromErr(error, source, level, x);
+    }
     else capture(level, source, 'Error', ser(error), undefined, x);
   } catch {
     /* never throw */

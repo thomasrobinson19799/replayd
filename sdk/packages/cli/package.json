@@ -4,10 +4,19 @@
   "type": "module",
   "sideEffects": false,
   "license": "UNLICENSED",
-  "files": ["dist"],
-  "exports": { ".": { "import": "./dist/index.js" } },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "node ../../scripts/build.mjs build.json && tsc -p tsconfig.build.json"
   },
-  "bin": { "replayd": "./dist/index.js" }
+  "bin": {
+    "replayd": "./dist/index.js"
+  }
 }
