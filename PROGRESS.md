@@ -58,6 +58,19 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | T-51 | Benchmarks vs Sentry config, real-device APK checklist | todo | |
 | T-52 | Migration: replace Sentry in 3 terminals + sites | todo | |
 
+## Continue in a new session (paste this prompt)
+```
+You are continuing the "replayd" project in this repo (branch claude/sweet-clarke-h5srzw).
+Read PRD.md (including the Decisions log at the end), AGENTS.md and PROGRESS.md, then `git log --oneline | head -30`.
+Continue from the first task in PROGRESS.md that is not `done`/`skipped`, milestone by milestone (M2 → M5) without
+stopping between milestones. Follow AGENTS.md rules and the owner's working agreement in it (per task: implement →
+tests → checks → commit "T-xx: <title>" → tick PROGRESS.md → push). Record deviations in the PRD Decisions log and
+numbers in docs/bench.md. Environment notes: start Docker with `nohup dockerd >/tmp/dockerd.log 2>&1 &` if it is not
+running; `make db` starts Postgres 17 + Atlas migrations on :55432; `make test`, `make up` (stack on :8088),
+`scripts/bench-server.sh`, `scripts/crash-test.sh`, `node e2e/issues.e2e.mjs` (E2E_ADMIN_PASSWORD may need to match
+the existing admin). Before stopping for any reason: commit, push, and update this section if the workflow changed.
+```
+
 ## Session log
 - 2026-11-03: M1 complete (T-12…T-18). M2: T-21 done early (server-only, no conflicts). GitHub push access fixed by owner.
 - 2026-11-03: M0 complete (T-01, T-03, T-04, T-10, T-11). Push to GitHub blocked (403: Claude GitHub App has no write access to thomasrobinson19799/replayd); commits are local until access is fixed.
