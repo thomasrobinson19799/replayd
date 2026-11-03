@@ -6,9 +6,9 @@ export let O: Resolved;
 
 /** Built-in redaction defaults (PRD §0.2). Lists only ever grow (user options and remote config extend). */
 const RD: Required<RedactOptions> = {
-  headers: ['authorization', 'cookie', 'set-cookie', 'x-api-key'],
-  bodyKeys: ['password', 'token', 'access_token', 'refresh_token', 'secret', 'otp', 'pin', 'cvv', 'card_number'],
-  queryParams: ['token', 'key', 'signature'],
+  headers: 'authorization cookie set-cookie x-api-key'.split(' '),
+  bodyKeys: 'password token access_token refresh_token secret otp pin cvv card_number'.split(' '),
+  queryParams: 'token key signature'.split(' '),
 };
 
 let rv = 0;
@@ -54,17 +54,13 @@ export const dsn = (d: string, tunnel: string | undefined, cap: boolean) => {
   if (!pid || !u.username) throw 0;
   key = encodeURIComponent(decodeURIComponent(u.username));
   base = tunnel && !cap ? `${tunnel.replace(/\/+$/, '')}/${pid}/` : `${u.origin}${p.slice(0, i)}/ingest/${pid}/`;
-  abs = new URL(base, W.location.href).href;
+  abs = absu(base);
 };
 export const iurl = (kind: string) => `${base}${kind}?key=${key}`;
+/** absolute URL (relative to the page; under Capacitor that is https://localhost) */
+export const absu = (u: string) => new URL(u, W.location.href).href;
 /** true for the SDK's own ingest URLs (never captured) */
-export const own = (u: string) => {
-  try {
-    return new URL(u, W.location.href).href.startsWith(abs);
-  } catch {
-    return false;
-  }
-};
+export const own = (u: string) => absu(u).startsWith(abs);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type A = any;

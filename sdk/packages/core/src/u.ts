@@ -64,13 +64,21 @@ export const sset = (l: 0 | 1, k: string, v: unknown) => {
 
 /** teardown list for close(): restores patches, removes listeners */
 export const un: (() => void)[] = [];
-type L = (e: never) => void;
+type L = (e: never) => unknown;
+/** addEventListener with a try/catch'd handler (never throws into the app); removed on close() */
 export const on = (t: EventTarget, e: string, f: L, o: AddEventListenerOptions | boolean = { capture: true, passive: true }) => {
-  t.addEventListener(e, f as EventListener, o);
-  un.push(() => t.removeEventListener(e, f as EventListener, o));
+  const g = (x: Event) => {
+    try {
+      f(x as never);
+    } catch {
+      err();
+    }
+  };
+  t.addEventListener(e, g, o);
+  un.push(() => t.removeEventListener(e, g, o));
 };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type F = (...a: any[]) => any;
+export type F = (...a: any[]) => any;
 /** replaces o[k] with mk(original); restored on close() unless someone wrapped us since */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const patch = (o: any, k: string, mk: (orig: F) => F) => {
@@ -82,6 +90,44 @@ export const patch = (o: any, k: string, mk: (orig: F) => F) => {
     if (o[k] === w) o[k] = orig;
   });
 };
+/** wraps g: the original runs FIRST (result/exception untouched), then f(result, args, this) if enabled */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const wrapf = (g: F, f: (r: any, a: IArguments, t: any) => void) =>
+  function (this: unknown) {
+    // eslint-disable-next-line prefer-rest-params
+    const r = g.apply(this, arguments as never);
+    if (en)
+      try {
+        // eslint-disable-next-line prefer-rest-params
+        f(r, arguments, this);
+      } catch {
+        err();
+      }
+    return r;
+  };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const after = (o: any, k: string, f: Parameters<typeof wrapf>[1]) => patch(o, k, (g) => wrapf(g, f));
+/**
+ * Replaces constructor W[k] by a wrapper that constructs the native (Reflect.construct keeps new.target,
+ * so subclasses work and calling without `new` still throws), then runs f(instance) if enabled.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const ctor = (k: string, f: (x: any) => void) =>
+  patch(W, k, (N) => {
+    const C = function (this: unknown) {
+      // eslint-disable-next-line prefer-rest-params
+      const x = Reflect.construct(N, arguments, new.target);
+      if (en)
+        try {
+          f(x);
+        } catch {
+          err();
+        }
+      return x;
+    };
+    statics(C, N);
+    return C;
+  });
 /** copies own statics (constants, length, name) of a native constructor onto its wrapper */
 export const statics = (w: F, n: F) => {
   for (const k of Reflect.ownKeys(n))

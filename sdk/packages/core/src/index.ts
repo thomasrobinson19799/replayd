@@ -1,23 +1,21 @@
 /** @replayd/core — public API (PRD §4.1). `init()` is synchronous, < 1 ms, and never throws. */
-import type { Breadcrumb, Internal, ReplaydOptions, User } from './types';
+import type { Breadcrumb, Internal, ReplaydEvent, ReplaydOptions, User } from './types';
+import { loaders } from './chunks';
 import { O, applyRc, cachedRc, dsn, fetchRc, iurl, resolve, stale } from './config';
+import { consoleHooks, navHooks } from './console';
+import { capture, ctx, errHandlers, fromErr, isErr, platform, resetFlood, ser, setOnErr, setPlatform, setUser as su, tags } from './errors';
+import { httpHooks } from './http';
 import { crumb, drain, rec, resetRing, setSink } from './ring';
 import { act, nextSeq, sInit, sSave, sampled, sess } from './session';
 import { flushEv, hdr, pump, reset, send, setTf, tf } from './transport';
 import { W, en, ie, offUntil, on, setOk, un } from './u';
 
 export type * from './types';
+export { loaders };
 export const SDK_VERSION: string = __RP_VERSION__;
 
-/** scope (user / tags / contexts) attached to every event */
-export let user: User | undefined;
-export const tags: Record<string, string> = {};
-export const ctx: Record<string, unknown> = {};
-export let platform: Internal['platform'] = 'web';
-let started = false, onErr = () => {};
-/** force-segment-flush hook (replay chunk), called for every captured error */
-export const forceFlush = () => onErr();
-export const counters = { ws_disc: 0 };
+let started = false;
+const c = { ws_disc: 0 };
 
 const I: Internal = {
   o: () => O,
@@ -25,24 +23,16 @@ const I: Internal = {
   seq: nextSeq,
   drain,
   sink: setSink,
-  onError: (f) => {
-    onErr = f;
-  },
+  onError: setOnErr,
   en: () => en,
   url: iurl,
-  fetch: (...a) => tf.apply(W, a),
+  fetch: (a, b) => tf.call(W, a, b),
   send,
   ie: () => ie,
-  c: counters,
+  c,
   get platform() {
     return platform;
   },
-};
-
-/** lazy chunk loaders; replaceable by the IIFE build (T-40) to load from the script's base URL */
-export const loaders = {
-  replay: () => import('./replay/index'),
-  capacitor: () => import('./capacitor/index'),
 };
 
 /** PRD §4.4 step 2: after load → idle: remote config, sample check, lazy chunks */
@@ -71,16 +61,24 @@ export function init(options: ReplaydOptions): void {
   try {
     if (started || !W.document || offUntil() > Date.now()) return;
     const cap = !!W.Capacitor?.isNativePlatform?.();
-    platform = cap ? 'capacitor-android' : 'web';
+    setPlatform(cap ? 'capacitor-android' : 'web');
     resolve(options);
     dsn(options.dsn, options.tunnel, cap);
     started = true;
     // D-07: our uploads bypass CapacitorHttp and our own fetch patch
     setTf(W.CapacitorWebFetch ?? W.fetch);
-    sInit(cap, resetRing);
+    sInit(cap, () => {
+      resetRing();
+      resetFlood();
+      c.ws_disc = 0;
+    });
     setOk(true);
     const cc = cachedRc();
     if (cc) applyRc(cc.c);
+    errHandlers();
+    consoleHooks();
+    httpHooks();
+    navHooks();
     for (const e of ['pointerdown', 'keydown', 'scroll']) on(W, e, act);
     on(W, 'pagehide', hide);
     on(W.document, 'visibilitychange', () => W.document.visibilityState == 'hidden' && hide());
@@ -92,11 +90,29 @@ export function init(options: ReplaydOptions): void {
   }
 }
 
-export function captureException(_error: unknown, _ctx?: Record<string, unknown>): void {}
-export function captureMessage(_message: string, _level: 'error' | 'warning' = 'error'): void {}
+export interface CaptureHint {
+  level?: ReplaydEvent['level'];
+  /** event source; framework adapters pass 'vue' / 'react' */
+  source?: ReplaydEvent['source'];
+  /** merged into `ctx` (e.g. `{ component, info }`) */
+  ctx?: Record<string, unknown>;
+}
+
+export function captureException(error: unknown, hint: CaptureHint = {}): void {
+  try {
+    const { level = 'error', source = 'manual', ctx: x } = hint;
+    if (isErr(error)) fromErr(error, source, level, x);
+    else capture(level, source, 'Error', ser(error), undefined, x);
+  } catch {
+    /* never throw */
+  }
+}
+export function captureMessage(message: string, level: ReplaydEvent['level'] = 'error'): void {
+  capture(level, 'manual', 'Message', String(message));
+}
 
 export function setUser(u: User | null): void {
-  user = u ?? undefined;
+  su(u ?? undefined);
 }
 export function setTag(k: string, v: string): void {
   tags[k] = String(v);
@@ -104,14 +120,14 @@ export function setTag(k: string, v: string): void {
 export function setTags(t: Record<string, string>): void {
   for (const k in t) setTag(k, t[k]!);
 }
-export function setContext(name: string, c: Record<string, unknown> | null): void {
-  if (c) ctx[name] = c;
+export function setContext(name: string, x: Record<string, unknown> | null): void {
+  if (x) ctx[name] = x;
   else delete ctx[name];
 }
 export function addBreadcrumb(b: Partial<Breadcrumb> & { msg: string }): void {
-  const ts = b.ts ?? Date.now();
-  crumb(b.cat ?? 'custom', b.msg, b.data, ts);
-  rec('breadcrumb', { cat: b.cat ?? 'custom', msg: b.msg, data: b.data }, ts);
+  const ts = b.ts ?? Date.now(), cat = b.cat ?? 'custom';
+  crumb(cat, b.msg, b.data, ts);
+  rec('breadcrumb', { cat, msg: b.msg, data: b.data }, ts);
 }
 
 /** sends pending events now; resolves once queued (uploads continue in the background) */

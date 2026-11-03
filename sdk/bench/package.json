@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "spike:t01": "node spikes/t01-rrweb-cost.mjs",
+    "spike:t03-sdk": "node spikes/t03/run-sdk.mjs",
     "bench": "node perf/run.mjs"
   },
   "devDependencies": {

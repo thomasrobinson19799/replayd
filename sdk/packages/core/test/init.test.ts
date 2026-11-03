@@ -92,7 +92,7 @@ describe('init', () => {
     core = await load();
     const cap = vi.spyOn(core.loaders, 'capacitor').mockResolvedValue({ startCapacitor: () => {} });
     core.init({ dsn: DSN, tunnel: '/_rp' });
-    expect(core.platform).toBe('capacitor-android');
+    expect((await import('../src/errors')).platform).toBe('capacitor-android');
     await vi.waitFor(() => expect(cap).toHaveBeenCalled());
     expect(webFetch.mock.calls[0]![0]).toBe('https://replay.example.com/ingest/fxglory-terminal/config?key=pk123');
     expect(f).not.toHaveBeenCalled();

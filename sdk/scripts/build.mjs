@@ -1,5 +1,6 @@
 // Shared esbuild-based build for SDK packages. Usage (from a package dir): node ../../scripts/build.mjs <config.json>
-// config: { entries: {name: srcPath}, formats: ['esm'|'iife'|'cjs'], external: [...], platform, iifeName, splitting }
+// config: { entries: {name: srcPath}, formats: ['esm'|'iife'|'cjs'], external: [...], platform, iifeName, splitting,
+//           iifeAliases: {importPath: srcPath} — swaps relative imports in the IIFE build only }
 import { build } from 'esbuild';
 import { readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -15,7 +16,14 @@ const common = {
 for (const fmt of cfg.formats ?? ['esm']) {
   if (fmt === 'iife') {
     for (const [name, src] of Object.entries(cfg.iife ?? {})) {
-      await build({ ...common, entryPoints: [resolve(cwd, src)], format: 'iife', globalName: cfg.iifeName, outfile: resolve(cwd, `dist/${name}.js`) });
+      const alias = Object.entries(cfg.iifeAliases ?? {});
+      const plugins = alias.length ? [{
+        name: 'iife-aliases',
+        setup(b) {
+          for (const [from, to] of alias) b.onResolve({ filter: new RegExp(`^${from.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`) }, () => ({ path: resolve(cwd, to) }));
+        },
+      }] : [];
+      await build({ ...common, entryPoints: [resolve(cwd, src)], format: 'iife', globalName: cfg.iifeName, outfile: resolve(cwd, `dist/${name}.js`), plugins });
     }
     continue;
   }
