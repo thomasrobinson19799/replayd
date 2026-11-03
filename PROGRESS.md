@@ -19,7 +19,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | T-12 | Core SDK: init, session manager, transport, retry, ring buffer | todo | |
 | T-13 | Core SDK: errors, flood control, redaction | todo | |
 | T-14 | Core SDK: WebSocket + EventSource patch, gate, outgoing capture | todo | |
-| T-15 | Server: ingest events + remote config + project cache + rate limits | todo | |
+| T-15 | Server: ingest events + remote config + project cache + rate limits | done | ingest crate: events/config/replay(stub 501 until T-21)/sdk files; key → origin → per-project + per-IP token buckets (bounded, swept) → size cap → gzip/JSON check → bounded try_send (503 Retry-After 5); kill switch header; CORS w/o preflight. Load test: 2k req/s p99 0.69 ms, 10k req/s p99 0.92 ms, RSS ≤ 19 MB (docs/bench.md). |
 | T-16 | Server: stack parsing, URL normalization, fingerprint, issues upsert, COPY | todo | |
 | T-17 | Server: auth, users, projects, members, RBAC | todo | |
 | T-18 | Dashboard: login, projects, issues list/detail | todo | |

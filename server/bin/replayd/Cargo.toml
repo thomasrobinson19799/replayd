@@ -12,6 +12,9 @@ workspace = true
 
 [dependencies]
 anyhow.workspace = true
+replayd-common.workspace = true
+replayd-db.workspace = true
+replayd-ingest.workspace = true
 axum.workspace = true
 mimalloc.workspace = true
 tokio.workspace = true
