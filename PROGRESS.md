@@ -20,7 +20,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | T-13 | Core SDK: errors, flood control, redaction | todo | |
 | T-14 | Core SDK: WebSocket + EventSource patch, gate, outgoing capture | todo | |
 | T-15 | Server: ingest events + remote config + project cache + rate limits | done | ingest crate: events/config/replay(stub 501 until T-21)/sdk files; key → origin → per-project + per-IP token buckets (bounded, swept) → size cap → gzip/JSON check → bounded try_send (503 Retry-After 5); kill switch header; CORS w/o preflight. Load test: 2k req/s p99 0.69 ms, 10k req/s p99 0.92 ms, RSS ≤ 19 MB (docs/bench.md). |
-| T-16 | Server: stack parsing, URL normalization, fingerprint, issues upsert, COPY | todo | |
+| T-16 | Server: stack parsing, URL normalization, fingerprint, issues upsert, COPY | done | pipeline crate: V8/SpiderMonkey/JSC stack parser, `~/path` normalization + in-app rules (TradingView/vendor not in-app), build-hash stripping, message normalization (numbers, MT logins, UUID, hex, quotes, symbols + project regex rules), error/HTTP/WS fingerprints, 3 workers, issue upsert (sorted, no deadlocks), approx users_seen, temp-table COPY + ON CONFLICT DO NOTHING, in-memory event-id dedupe, gzip-bomb cap, graceful SIGTERM drain. Load: 2k req/s (6k events/s to PG) p99 2.21 ms, zero loss. |
 | T-17 | Server: auth, users, projects, members, RBAC | todo | |
 | T-18 | Dashboard: login, projects, issues list/detail | todo | |
 

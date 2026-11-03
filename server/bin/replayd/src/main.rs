@@ -80,9 +80,11 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(projects = n, "project cache loaded");
     projects.spawn_refresh(pool.clone(), Duration::from_secs(cfg.ingest.project_refresh_secs));
 
-    let (events_tx, mut events_rx) = mpsc::channel::<EventJob>(cfg.ingest.events_queue);
-    // Error pipeline consumer (T-16 replaces this drain).
-    tokio::spawn(async move { while events_rx.recv().await.is_some() {} });
+    let (events_tx, events_rx) = mpsc::channel::<EventJob>(cfg.ingest.events_queue);
+    // Error pipeline: 3 workers share the bounded queue (§5.5). Alert signals are wired in T-32.
+    let pipeline = replayd_pipeline::Shared::new(pool.clone(), projects.clone(), None);
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    let workers = replayd_pipeline::spawn(pipeline, events_rx, 3, shutdown_rx);
 
     let ingest = Arc::new(IngestState::new(
         projects.clone(),
@@ -97,11 +99,39 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(cfg.listen).await?;
     tracing::info!(addr = %cfg.listen, version = env!("CARGO_PKG_VERSION"), "replayd listening");
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        .with_graceful_shutdown(shutdown_signal())
         .await?;
+    // Stop accepting, then let the pipeline drain the queue and flush (bounded wait).
+    tracing::info!("shutting down: draining queues");
+    let _ = shutdown_tx.send(true);
+    let drained =
+        tokio::time::timeout(Duration::from_secs(20), futures_util::future::join_all(workers)).await;
+    if drained.is_err() {
+        tracing::warn!("pipeline drain timed out");
+    }
     Ok(())
+}
+
+/// SIGINT (Ctrl-C) or SIGTERM (`docker stop`, systemd).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let term = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut s) => {
+                s.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    #[cfg(not(unix))]
+    let term = std::future::pending::<()>();
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = term => {},
+    }
 }
 
 #[cfg(test)]

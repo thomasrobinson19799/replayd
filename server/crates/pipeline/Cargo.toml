@@ -11,3 +11,20 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+flate2 = "1.1.10"
+metrics = "0.24.6"
+parking_lot = "0.12"
+regex = "1.11"
+replayd-db.workspace = true
+replayd-ingest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha1 = "0.10"
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+woothee = "0.13.0"
+
+[dev-dependencies]
+bytes.workspace = true
+flate2 = "1.1.10"

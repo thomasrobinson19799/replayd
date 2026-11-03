@@ -21,9 +21,15 @@ chain active (key, origin allowlist, token buckets, gzip check, bounded queue).
 | 2026-11-03 | `GET /ingest/:pid/config` | 2,000/s | 20 s | 40,000 | 100% 200 | 0.20 ms | 0.39 ms | **0.88 ms** | 4.24 ms | 8.1 ms | 13.3 → 19.3 MB |
 | 2026-11-03 | `POST /ingest/:pid/events` (headroom) | 10,000/s | 20 s | 199,990 | 100% 202 | 0.21 ms | 0.45 ms | **0.92 ms** | 5.30 ms | 75.7 ms | 15.2 → 19.2 MB |
 
+| 2026-11-03 | `POST /ingest/:pid/events` **+ full error pipeline (T-16)** | 2,000/s | 60 s | 120,001 | 100% 202 | 0.22 ms | 0.68 ms | **2.21 ms** | 5.05 ms | 36.4 ms | 20.1 → 65.1 MB |
+
+The first three rows were measured with the events queue only drained (T-15). The last row has the real pipeline
+behind ingest: 6,000 events/s parsed, grouped, upserted into `issues` and COPY'd into `events` by 3 workers, with
+Postgres, the server and `oha` all sharing the same 4 vCPUs. Every accepted event was stored. A later 30 s run
+after the graceful-drain fix counted rows: 179,997 events stored for 59,998 accepted requests, so zero loss.
+
 Budgets: ingest p99 < 5 ms ✔, ≥ 2,000 req/s sustained ✔, RSS idle < 60 MB ✔ / load < 250 MB ✔.
-Note: at this stage the events queue consumer only drains (pipeline lands in T-16); the 10-minute 2k req/s run
-with the full pipeline and replay writers is part of T-21/T-51.
+The 10-minute 2k req/s run with replay writers included is part of T-21/T-51.
 
 ## SDK (PRD §2.1)
 

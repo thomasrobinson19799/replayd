@@ -31,7 +31,7 @@ RSS_IDLE=$(awk '/VmRSS/{print $2}' /proc/$PID/status)
 # realistic payloads: a gzip batch of 3 error events (~1 KB) and a 60 KB replay segment
 BODY_EVENTS="$OUT/events.gz"
 node -e '
-const zlib=require("zlib");const ev=i=>({id:"0192f0c4-7a3e-7b1a-9c2d-3e4f5a6b7c8"+i,ts:Date.now(),sid:"0192f0c4-7a3e-7b1a-9c2d-3e4f5a6b7c8d",level:"error",source:"onerror",type:"TypeError",message:"Cannot read properties of undefined (reading \x27price\x27)",stack:"TypeError: Cannot read properties of undefined (reading \x27price\x27)\n    at OrderPanel.submit (https://terminal.fxglory.com/_nuxt/OrderPanel.Cx1.js:1:2345)\n    at HTMLButtonElement.<anonymous> (https://terminal.fxglory.com/_nuxt/entry.B2.js:3:999)",url:"https://terminal.fxglory.com/trade",release:"1.42.0",env:"production",platform:"web",breadcrumbs:Array.from({length:10},(_,k)=>({ts:k,cat:"click",msg:"button#buy"})),count:1});
+const zlib=require("zlib");const ev=i=>({ts:Date.now(),sid:"0192f0c4-7a3e-7b1a-9c2d-3e4f5a6b7c8d",level:"error",source:"onerror",type:"TypeError",message:"Cannot read properties of undefined (reading \x27price\x27)",stack:"TypeError: Cannot read properties of undefined (reading \x27price\x27)\n    at OrderPanel.submit (https://terminal.fxglory.com/_nuxt/OrderPanel.Cx1.js:1:2345)\n    at HTMLButtonElement.<anonymous> (https://terminal.fxglory.com/_nuxt/entry.B2.js:3:999)",url:"https://terminal.fxglory.com/trade",release:"1.42.0",env:"production",platform:"web",breadcrumbs:Array.from({length:10},(_,k)=>({ts:k,cat:"click",msg:"button#buy"})),count:1});
 process.stdout.write(zlib.gzipSync(JSON.stringify([ev(1),ev(2),ev(3)])));' > "$BODY_EVENTS"
 
 case "$KIND" in
