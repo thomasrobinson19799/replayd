@@ -11,7 +11,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | T-03 | Spike: CapacitorHttp + fetch/XHR patch | done | docs/spikes/T-03.md. Real Capacitor 8.6.0 bridge emulated in Chromium. Bridge clobbers XHR prototype per construction → constructor wrapper (D-07); transport uses CapacitorWebFetch. Real-device check stays in T-26/T-51. |
 | T-04 | Spike: WP Rocket exclusion | done | docs/spikes/T-04.md. WP Rocket v3.24 real DelayJS PHP + runtime: SDK runs at 18 ms with rocket_delay_js_exclusions '/_rp/sdk/' (D-08). Staging fxglory.com check is part of T-41 (needs access). |
 | T-10 | Monorepo scaffold, CI, size-limit, Atlas, compose | done | server/ cargo workspace (7 crates + bin), sdk/ pnpm workspace (core/vue/nuxt/react/vite-plugin/cli + bench), dashboard/ Nuxt 4 SPA, Atlas migration 0001 (+ daily partition fn), deploy/ compose (pg17, atlas 1.3.6, replayd, nginx), Makefile dev/test/bench/up, .gitlab-ci.yml + GH Actions. `make test` and `make up` green. |
-| T-11 | Wire format + `.rpl` format (Rust) + TS encoder | todo | |
+| T-11 | Wire format + `.rpl` format (Rust) + TS encoder | done | Rust `common::{wire,rpl,ids}` (zero-copy parse, gzip magic check, no decompression; .rpl index tolerates truncated tail, dedups by seq). TS `@replayd/core/wire` encoder + .rpl reader. Fixtures in /fixtures/wire: TS→Rust segment.bin, Rust→TS session.rpl, byte-exact both ways. |
 
 ## M1 — Errors from terminals grouped in dashboard
 | ID | Task | Status | Notes / blockers |
@@ -59,4 +59,5 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | T-52 | Migration: replace Sentry in 3 terminals + sites | todo | |
 
 ## Session log
+- 2026-11-03: M0 complete (T-01, T-03, T-04, T-10, T-11). Push to GitHub blocked (403: Claude GitHub App has no write access to thomasrobinson19799/replayd); commits are local until access is fixed.
 - 2026-11-03: repo bootstrapped (PRD.md, AGENTS.md, CLAUDE.md, PROGRESS.md). Env: Rust 1.97, Node 22, pnpm, Docker 29 (dockerd must be started manually in the cloud sandbox: `nohup dockerd &`), postgres:17 + arigaio/atlas images available.
