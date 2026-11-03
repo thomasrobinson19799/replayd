@@ -55,8 +55,8 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | T-40 | `@replayd/nuxt`, `@replayd/vue`, `@replayd/react`, IIFE build | done | Vue errorHandler chain (component + info), React root handler + ErrorBoundary, Nuxt module + client plugin (runtime config, app_version release, self/apiHost, chained handler + app:error), IIFE data-attribute auto-init; core dedups already-reported errors (D-28). examples/{html,vue,react,nuxt} + e2e/adapters.e2e.mjs: each app → exactly 1 issue with adapter context. Adapters 302/436/416 B. |
 | T-41 | `replayd-wp` plugin | blocked | Plugin done and verified locally: wordpress/replayd-wp (settings page, first-in-head `defer` tag with data-* config, no inline script, WP Rocket filters per D-08, uninstall). PHP unit tests (25 checks, `docker run php:8.3-cli php wordpress/replayd-wp/tests/run.php`) + e2e/wordpress.e2e.mjs on real WordPress 6.8: tag first in head, error before interaction + click error arrive, replay recorded. **Blocked:** acceptance needs the staging fxglory.com install (no access); WP Rocket real-code run on the WP page not repeated here (T-04 covers the same patterns). |
 | T-50 | Observability: metrics, JSON logs, Grafana JSON, alert rules | done | Prometheus exporter + /metrics (internal), queue depth / disk / symbolication / Telegram / API-latency metrics, API request JSON logs with req_id + latency_ms (D-29); deploy/observability: Grafana dashboard (18 panels), 6 alert rules, scrape example. e2e/observability.e2e.mjs: promtool OK, live scrape, all dashboard queries valid, imports into Grafana 12.1. |
-| T-51 | Benchmarks vs Sentry config, real-device APK checklist | todo | |
-| T-52 | Migration: replace Sentry in 3 terminals + sites | todo | |
+| T-51 | Benchmarks vs Sentry config, real-device APK checklist | blocked | sdk/bench/perf/compare.mjs vs @sentry/browser 11.10 with the terminals' config: replayd 1/5 of the main-thread time at 4×, 6.96 vs 98.5 KB up front, 1.55 vs 6.83 KB/s uplink. Server re-check: events p99 3.97 ms, replay p99 1.10 ms at 2k/s. Budget table in docs/bench.md. **Blocked:** real-device run of docs/apk-checklist.md (no device), which also settles the open snapshot budget. |
+| T-52 | Migration: replace Sentry in 3 terminals + sites | blocked | docs/migration.md (nginx /sentry → /_rp, Nuxt config diff, CI source-map job, WordPress, APK, clean-up checklist). **Blocked:** the terminal / site repositories are not available in this session. |
 
 ## Continue in a new session (paste this prompt)
 ```
@@ -80,6 +80,7 @@ Before stopping for any reason: commit, push, and update this section if the wor
 ```
 
 ## Session log
+- 2026-11-03: M5: T-40, T-50 done; T-41 (staging access), T-51 (device), T-52 (app repos) blocked on external access.
 - 2026-11-03: M4 complete (T-31…T-35).
 - 2026-11-03: M2 complete (T-20…T-23), M3 complete (T-25, T-26, T-30; T-24 skipped). Owner accepted the measured 4× per-batch figure (D-20). Snapshot budget open on this VM (T-51).
 - 2026-11-03: M1 complete (T-12…T-18). M2: T-21 done early (server-only, no conflicts). GitHub push access fixed by owner.

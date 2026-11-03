@@ -235,3 +235,44 @@ Sizes (`pnpm size`): @replayd/vue 302 B, @replayd/react 436 B, @replayd/nuxt plu
 tag first in `<head>` (`defer`, data-* config, no inline script) ✔, error thrown on `DOMContentLoaded` before any
 interaction arrives ✔, click error arrives ✔, replay session recorded with release `wp-1.0.0` ✔. Staging fxglory.com
 with WP Rocket: pending access.
+
+### replayd vs the terminals' current Sentry setup — T-51
+`node sdk/bench/perf/compare.mjs` (terminal mock `?hist=60&throttle=1000`, 200 WS msg/s, 10 Hz repaint; SDK first in
+`<head>`; Sentry = `@sentry/browser` 11.10.0 with replay at sample rate 1, `browserTracingIntegration`,
+`captureConsoleIntegration`, `httpClientIntegration`, `/sentry` tunnel — PRD §4.3). Main-thread SDK time = top-level
+FunctionCalls into each SDK's own scripts per 500 ms window (includes core instrumentation for both); 20 s × 2 runs.
+
+| Date | CPU | SDK | JS up front (gz) | Lazy (gz) | Batch p50 | Batch p95 | SDK ms/s | Long tasks | Uplink | Main heap Δ |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-11-03 | 4× | **replayd** | **6.96 KB** | 28.3 KB | **11.4 ms** | **17.5 ms** | **23.9** | 0 | **1.55 KB/s** | 1.37 MB |
+| | 4× | Sentry | 98.5 KB | – | 60.1 ms | 90.6 ms | 123.3 | 1 | 6.83 KB/s | 2.65 MB |
+| | 1× | **replayd** | 6.96 KB | 28.3 KB | **3.5 ms** | **5.7 ms** | **7.3** | 0 | **2.49 KB/s** | 1.35 MB |
+| | 1× | Sentry | 98.5 KB | – | 10.2 ms | 14.6 ms | 20.5 | 0 | 7.88 KB/s | 2.55 MB |
+
+replayd uses about 1/5 of Sentry's main-thread time at 4× and 1/3 at 1×, 1/14 of the up-front JS, and about 1/4 of
+the uplink. Note that these per-window numbers include core's WS/console/fetch instrumentation (200 WS messages/s);
+the replay-only figures are in the T-20 section.
+
+### Server re-check after M3–M5 — T-51
+`scripts/bench-server.sh 30s 2000 <kind>` (release build, Postgres in Docker, this VM):
+
+| Date | Kind | Rate | p50 | p99 | p999 | Errors | RSS idle / peak |
+|---|---|---|---|---|---|---|---|
+| 2026-11-03 | events (pipeline + symbolication + alerts wired) | 2,000/s | 0.26 ms | **3.97 ms** | 52 ms | 0 / 60,000 | 25 / 58 MB |
+| | replay | 2,000/s | 0.26 ms | **1.10 ms** | 8.7 ms | 2 of 60,000 not 202 (client timeouts) | 23 / 39 MB |
+
+Ingest p99 < 5 ms ✔, RSS < 60 / 250 MB ✔. Events p99 rose from 0.69 ms (T-15, faster VM) to 3.97 ms on this VM;
+that is within budget but close to it, so re-check on the 4 vCPU Hetzner box.
+
+### Budget status (T-51)
+| Budget | Status |
+|---|---|
+| Core ≤ 7 KB, replay chunk ≤ 45 KB, worker ≤ 4 KB, adapters ≤ 1 KB | ✔ 6.96 / 25.6 / 2.7 KB, 302–436 B |
+| Per-batch < 2 ms p95 at 4× | ✖ 7.58 ms on the terminal mock; accepted by the owner (D-20); ✔ at 1× (1.29 ms) |
+| Snapshot < 150 / < 50 ms | ✖ on this VM (308 / 61 ms); spike reference on the same VM 248 / 44 ms. Open: measure on the reference device |
+| WS message < 5 µs, init < 1 ms | ✔ (T-14, T-12) |
+| Long tasks after snapshot | ✔ none |
+| Uplink ≤ 5 KB/s | ✔ 1.2–2.5 KB/s (canvas out of scope) |
+| Server ingest p99 < 5 ms, ≥ 2k req/s, RSS | ✔ |
+| Session list < 100 ms p95, player first frame < 1 s | ✔ (T-22, T-23) |
+| Real-device APK checklist | ⏳ docs/apk-checklist.md, needs the device |
