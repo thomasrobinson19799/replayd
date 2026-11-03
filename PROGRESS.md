@@ -37,7 +37,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 |---|---|---|---|
 | T-24 | Canvas snapshotter + asset section + player plugin | skipped | Out of scope v1 (D-01) |
 | T-25 | WS tab in player | done | WS tab: connections with lifecycle (open/close code, frames), Centrifugo channels parsed from pushes + commands (newline batches, truncated frames tolerated), channel / direction / search filters, rows synced to the playhead, pretty-printed frame detail, abnormal closes as timeline markers. Unit tests (dashboard/test/ws.test.ts); e2e/sdk-replay.e2e.mjs shows 17 WS items from a real recording. |
-| T-26 | Capacitor module: lifecycle, device info, IndexedDB queue, direct transport | todo | |
+| T-26 | Capacitor module: lifecycle, device info, IndexedDB queue, direct transport | done | Capacitor chunk: App/Device info → ctx.app, tags, replay init; pause/resume/appStateChange/backButton → app events + breadcrumbs; pause flushes core + replay; worker IndexedDB outbox for segments + Capacitor IndexedDB queue for event bodies (20 MB / 24 h, gaps), drained on online/resume/start (D-21). Direct transport (tunnel ignored) as before. e2e/capacitor.e2e.mjs (emulated): offline → online drains both queues, issue visible 1.0 s after reconnect. Real device: T-51. |
 | T-30 | Source maps: upload API, CLI, Vite plugin, symbolication, reprocess | todo | |
 
 ## M4 — Issue workflow, alerts, retention, remote config, roles

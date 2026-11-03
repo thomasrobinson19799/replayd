@@ -176,3 +176,14 @@ task adds ~20–40% on top of bare `record()` (chunk evaluation, worker start, b
 T-51 on the reference device; the budget is unchanged. No long tasks after the snapshot in any steady-state run.
 
 Sizes (`pnpm size`): core 6.86 KB, replay chunk 25.6 KB (≤ 45), worker 2.7 KB (≤ 4).
+
+### Capacitor offline queue — T-26
+`e2e/capacitor.e2e.mjs` (Chromium, fake Capacitor runtime with App + Device plugins, IIFE SDK against the stack;
+Playwright `setOffline`). Real-device run: T-51 APK checklist.
+
+| Date | Step | Result |
+|---|---|---|
+| 2026-11-03 | 20 s offline: error thrown, App `pause`, replay running | 6 segments in the worker outbox, 1 event body in the Capacitor queue (IndexedDB) |
+| | online + App `resume` → issue visible in the API | 1.0 s |
+| | queues after drain | 0 / 0 |
+| | session | platform `capacitor-android`, app `1.42.0 (142)`, device `SM-A525F`, 8 segments, no gap |
