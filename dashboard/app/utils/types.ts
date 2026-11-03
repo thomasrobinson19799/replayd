@@ -119,3 +119,44 @@ export interface IssueDetail extends Issue {
   latest_event: IssueEvent | null
   can_change_status: boolean
 }
+
+export interface SessionRow {
+  id: string
+  project_id: number
+  started_at: number
+  last_at: number
+  ended: boolean
+  duration_ms: number
+  entry_url: string | null
+  user_id: string | null
+  user_email: string | null
+  release: string | null
+  environment: string | null
+  platform: string
+  app_version: string | null
+  device_model: string | null
+  os_version: string | null
+  webview_version: string | null
+  browser: string | null
+  browser_ver: string | null
+  os: string | null
+  vw: number | null
+  vh: number | null
+  lang: string | null
+  error_count: number
+  warn_count: number
+  click_count: number
+  ws_disconnects: number
+  segments: number
+  bytes: number
+  has_gap: boolean
+  file_day: string
+}
+
+export interface SessionDetail extends SessionRow {
+  errors: { id: string, ts: number, level: string | null, issue_id: number, title: string, status: string }[]
+  asset_base_url: string | null
+  asset_rewrite_from: string[]
+  project_slug: string
+  can_view_sensitive: boolean
+}

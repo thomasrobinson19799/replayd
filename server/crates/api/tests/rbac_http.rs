@@ -124,6 +124,7 @@ async fn rbac_matrix_over_http() {
         "https://replay.example.com".into(),
         true,
         vec![],
+        std::env::temp_dir(),
     )
     .await
     .unwrap();

@@ -28,3 +28,26 @@ export function errorMessage(e: unknown): string {
   const any = e as { data?: { error?: string }, statusMessage?: string, message?: string }
   return any?.data?.error ?? any?.statusMessage ?? any?.message ?? 'Request failed'
 }
+
+/** 1h 02m / 4m 05s / 12s */
+export function duration(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  if (h) return `${h}h ${String(m).padStart(2, '0')}m`
+  if (m) return `${m}m ${String(sec).padStart(2, '0')}s`
+  return `${sec}s`
+}
+
+/** Path + query of a URL, for compact display. */
+export function shortUrl(u: string | null): string {
+  if (!u) return ''
+  try {
+    const x = new URL(u)
+    return x.pathname + x.search
+  }
+  catch {
+    return u
+  }
+}

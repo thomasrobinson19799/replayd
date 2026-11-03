@@ -74,3 +74,26 @@ Spike numbers for rrweb on the terminal mock are in [spikes/T-01.md](spikes/T-01
 | Date | Test | Result |
 |---|---|---|
 | 2026-11-03 | `e2e/issues.e2e.mjs`: error thrown in test app → row visible in an open dashboard issues list | 3.89 s / 3.92 s / 3.89 s (budget 5 s) |
+
+### Session list query — T-22
+`psql -f scripts/seed-sessions.sql` (140,000 sessions = 14 days × 10,000/day; 40% APK, 10% with errors,
+20k users), then `E2E_BASE=… node e2e/bench-sessions.mjs`: p95 of 40 requests per filter combination, measured
+end to end over HTTP (auth, SQL, JSON, 50 rows/page).
+
+| Date | Filter | p50 | p95 |
+|---|---|---|---|
+| 2026-11-03 | default (14 days) | 5.5 ms | 7.4 ms |
+| | has_error | 5.4 ms | 6.7 ms |
+| | platform = APK | 4.9 ms | 6.3 ms |
+| | user id (7 sessions) | 4.6 ms | 5.7 ms |
+| | URL contains `/deposit` | 5.1 ms | 6.3 ms |
+| | release + browser | 4.5 ms | 5.2 ms |
+| | min duration 30 min | 4.7 ms | 6.9 ms |
+| | ws disconnect + APK | 4.9 ms | 6.0 ms |
+| | last 24 h | 3.4 ms | 3.8 ms |
+| | **URL contains, no match (worst case)** | 62.4 ms | **77.1 ms** |
+
+Budget: < 100 ms p95 ✔. The worst case is a "URL contains" search that matches nothing, so every daily partition
+is scanned. The trigram GIN index doesn't help: no-match lookups cost ~5 ms per 10k-row partition, because common
+trigrams such as `pag`/`age` occur in every row, and the planner picks a parallel seq scan, which is slightly
+faster. Every other filter stops after 50 rows on the `(project_id, started_at DESC)` index.

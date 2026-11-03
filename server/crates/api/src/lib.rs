@@ -5,6 +5,7 @@ pub mod error;
 pub mod issues;
 pub mod projects;
 pub mod rbac;
+pub mod sessions;
 pub mod users;
 
 use std::net::{IpAddr, SocketAddr};
@@ -31,6 +32,8 @@ pub struct ApiState {
     pub public_url: String,
     pub secure_cookies: bool,
     pub trusted_proxies: Vec<IpAddr>,
+    /// Replay files root (`data/<pid>/<day>/<sid>.rpl`).
+    pub data_dir: std::path::PathBuf,
     login_ip: BucketMap<IpAddr>,
     login_email: BucketMap<u64>,
 }
@@ -42,6 +45,7 @@ impl ApiState {
         public_url: String,
         secure_cookies: bool,
         trusted_proxies: Vec<IpAddr>,
+        data_dir: std::path::PathBuf,
     ) -> Result<Arc<Self>, replayd_db::DbError> {
         let st = Self {
             pool,
@@ -50,6 +54,7 @@ impl ApiState {
             public_url,
             secure_cookies,
             trusted_proxies,
+            data_dir,
             login_ip: BucketMap::new(50_000),
             login_email: BucketMap::new(50_000),
         };
@@ -104,6 +109,9 @@ pub fn router(st: Arc<ApiState>) -> Router {
         .route("/api/projects/{pid}/issues", get(issues::list))
         .route("/api/issues/{id}", get(issues::get_one))
         .route("/api/issues/{id}/events", get(issues::events))
+        .route("/api/projects/{pid}/sessions", get(sessions::list))
+        .route("/api/sessions/{sid}", get(sessions::get_one))
+        .route("/api/sessions/{sid}/recording", get(sessions::recording))
         .layer(axum::middleware::map_response(no_store))
         .with_state(st)
 }

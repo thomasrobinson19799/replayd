@@ -123,6 +123,7 @@ async fn main() -> anyhow::Result<()> {
         cfg.public_url.clone(),
         cfg.secure_cookies,
         cfg.trusted_proxies.clone(),
+        cfg.data_dir.clone(),
     )
     .await?;
 
