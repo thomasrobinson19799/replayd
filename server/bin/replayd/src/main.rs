@@ -95,7 +95,25 @@ async fn main() -> anyhow::Result<()> {
     ));
     ingest.spawn_sweeper();
 
-    let app = base_router().merge(replayd_ingest::router(ingest, cfg.sdk_dir.clone()));
+    replayd_api::bootstrap_admin(
+        &pool,
+        cfg.bootstrap_admin_email.as_deref(),
+        cfg.bootstrap_admin_password.as_deref(),
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("bootstrap admin: {e}"))?;
+    let api = replayd_api::ApiState::new(
+        pool.clone(),
+        projects.clone(),
+        cfg.public_url.clone(),
+        cfg.secure_cookies,
+        cfg.trusted_proxies.clone(),
+    )
+    .await?;
+
+    let app = base_router()
+        .merge(replayd_ingest::router(ingest, cfg.sdk_dir.clone()))
+        .merge(replayd_api::router(api));
     let listener = tokio::net::TcpListener::bind(cfg.listen).await?;
     tracing::info!(addr = %cfg.listen, version = env!("CARGO_PKG_VERSION"), "replayd listening");
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())

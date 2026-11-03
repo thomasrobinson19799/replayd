@@ -11,3 +11,22 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+argon2 = { version = "0.5.3", features = ["std"] }
+axum.workspace = true
+base64 = "0.22"
+deadpool-postgres = "0.14.2"
+getrandom = "0.2"
+parking_lot = "0.12"
+regex = "1.11"
+replayd-db.workspace = true
+replayd-ingest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tower.workspace = true
