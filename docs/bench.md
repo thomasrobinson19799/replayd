@@ -29,7 +29,30 @@ Postgres, the server and `oha` all sharing the same 4 vCPUs. Every accepted even
 after the graceful-drain fix counted rows: 179,997 events stored for 59,998 accepted requests, so zero loss.
 
 Budgets: ingest p99 < 5 ms ✔, ≥ 2,000 req/s sustained ✔, RSS idle < 60 MB ✔ / load < 250 MB ✔.
-The 10-minute 2k req/s run with replay writers included is part of T-21/T-51.
+The 10-minute 2k req/s run with replay writers included is part of T-51.
+
+### Replay ingest — T-21
+`node scripts/replay-load.mjs` sends valid segments (PRD §4.10 wire format, ~12.7 KB gzip each) for N concurrent
+sessions with increasing `seq`. Latency is measured **client-side** (Node `http`, keep-alive), so it includes the
+client's own overhead.
+
+| Date | Rate | Duration | Sessions | Requests | Status | p50 | p95 | p99 | Max | Disk written | RSS peak |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-11-03 | 2,000/s | 30 s | 2,000 | 60,008 | 100% 202 (0 × 503) | 0.74 ms | 1.59 ms | **3.01 ms** | 25.6 ms | 743 MB (~25 MB/s) | 63 MB |
+
+The session aggregator recorded every segment in `sessions.segments`.
+
+### Crash test — T-21
+`scripts/crash-test.sh 300 8`: 300 segments/s across 300 sessions, `kill -9` after 8 s, then every `.rpl` is
+indexed and compared with the client's ack log.
+
+| Date | Acked | Lost | Oldest lost ack before kill | Unreadable files | Corrupt bodies | Result |
+|---|---|---|---|---|---|---|
+| 2026-11-03 | 2,371 | 2 | 3 ms | 0 / 300 | 0 | **PASS** (budget: nothing acked > 1 s before the crash lost) |
+
+Note: data handed to the kernel survives a process `kill -9` (page cache). The group `fdatasync` every 1 s bounds
+the loss on power failure. The only process-crash exposure is segments still queued in a shard channel, and
+those are milliseconds old.
 
 ## SDK (PRD §2.1)
 

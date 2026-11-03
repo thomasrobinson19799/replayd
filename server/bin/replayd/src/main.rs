@@ -84,14 +84,29 @@ async fn main() -> anyhow::Result<()> {
     // Error pipeline: 3 workers share the bounded queue (§5.5). Alert signals are wired in T-32.
     let pipeline = replayd_pipeline::Shared::new(pool.clone(), projects.clone(), None);
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-    let workers = replayd_pipeline::spawn(pipeline, events_rx, 3, shutdown_rx);
+    let mut workers = replayd_pipeline::spawn(pipeline, events_rx, 3, shutdown_rx.clone());
+
+    // Replay storage: sharded .rpl writers + session aggregator (§5.3, §5.4).
+    let writers =
+        replayd_storage::Writers::start(replayd_storage::WriterConfig::new(cfg.data_dir.clone()), None)
+            .context("starting replay writers")?;
+    let (sessions_tx, sessions_rx) = mpsc::channel(50_000);
+    workers.push(replayd_storage::aggregator::spawn(
+        pool.clone(),
+        sessions_rx,
+        shutdown_rx,
+    ));
+    let sink: Arc<dyn replayd_ingest::ReplaySink> = Arc::new(replayd_storage::StorageSink {
+        writers: writers.clone(),
+        sessions: sessions_tx,
+    });
 
     let ingest = Arc::new(IngestState::new(
         projects.clone(),
         cfg.ingest.clone(),
         cfg.trusted_proxies.clone(),
         events_tx,
-        None,
+        Some(sink),
     ));
     ingest.spawn_sweeper();
 
@@ -121,6 +136,8 @@ async fn main() -> anyhow::Result<()> {
         .await?;
     // Stop accepting, then let the pipeline drain the queue and flush (bounded wait).
     tracing::info!("shutting down: draining queues");
+    let w = writers.clone();
+    let _ = tokio::task::spawn_blocking(move || w.sync_all()).await;
     let _ = shutdown_tx.send(true);
     let drained =
         tokio::time::timeout(Duration::from_secs(20), futures_util::future::join_all(workers)).await;

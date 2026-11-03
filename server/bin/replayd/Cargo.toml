@@ -17,6 +17,7 @@ replayd-common.workspace = true
 replayd-db.workspace = true
 replayd-ingest.workspace = true
 replayd-pipeline.workspace = true
+replayd-storage.workspace = true
 axum.workspace = true
 mimalloc.workspace = true
 futures-util = "0.3.31"
