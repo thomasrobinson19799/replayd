@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@rrweb/record@2.2.0':
+    hash: bd0c424e7c552f63813160de2169e3ab6b7d192ae8adbb39b2fff684535e6ec2
+    path: patches/@rrweb__record@2.2.0.patch
+
 importers:
 
   .:
@@ -46,7 +51,7 @@ importers:
     devDependencies:
       '@rrweb/record':
         specifier: 2.2.0
-        version: 2.2.0
+        version: 2.2.0(patch_hash=bd0c424e7c552f63813160de2169e3ab6b7d192ae8adbb39b2fff684535e6ec2)
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
@@ -59,7 +64,11 @@ importers:
 
   packages/cli: {}
 
-  packages/core: {}
+  packages/core:
+    devDependencies:
+      '@rrweb/record':
+        specifier: 2.2.0
+        version: 2.2.0(patch_hash=bd0c424e7c552f63813160de2169e3ab6b7d192ae8adbb39b2fff684535e6ec2)
 
   packages/nuxt:
     dependencies:
@@ -4426,7 +4435,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.67.4':
     optional: true
 
-  '@rrweb/record@2.2.0':
+  '@rrweb/record@2.2.0(patch_hash=bd0c424e7c552f63813160de2169e3ab6b7d192ae8adbb39b2fff684535e6ec2)':
     dependencies:
       '@rrweb/types': 2.2.0
       '@rrweb/utils': 2.2.0

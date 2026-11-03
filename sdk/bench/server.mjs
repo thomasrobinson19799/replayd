@@ -10,15 +10,22 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 export const SYMBOLS = ['EURUSD','GBPUSD','USDJPY','XAUUSD','XAGUSD','USDCHF','AUDUSD','NZDUSD','USDCAD','EURGBP','EURJPY','GBPJPY','BTCUSD','ETHUSD','US30','NAS100','SPX500','UKOIL','USOIL','EURCHF','AUDJPY','CADJPY','CHFJPY','EURAUD','EURCAD','EURNZD','GBPAUD','GBPCAD','GBPCHF','GBPNZD','NZDJPY','AUDCAD','AUDCHF','AUDNZD','NZDCAD','NZDCHF','USDSGD','USDHKD','USDTRY','USDZAR'];
 
-export function startServer(port = 0, rate = Number(process.env.WS_RATE ?? 200)) {
+/**
+ * `opts.hook(req, res, url)` runs first and returns true when it answered (perf suites serve the SDK and an
+ * ingest catcher this way: a Playwright page.route() of any pattern breaks the WebSocket upgrade);
+ * `opts.headers` are added to static responses; `opts.transform(path, buf)` may rewrite static bodies.
+ */
+export function startServer(port = 0, rate = Number(process.env.WS_RATE ?? 200), opts = {}) {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
+    if (opts.hook && (await opts.hook(req, res, url))) return;
     let p = normalize(join(root, decodeURIComponent(url.pathname)));
     if (!p.startsWith(root)) { res.writeHead(403).end(); return; }
     try {
       if ((await stat(p)).isDirectory()) p = join(p, 'index.html');
-      const body = await readFile(p);
-      res.writeHead(200, { 'content-type': types[extname(p)] ?? 'application/octet-stream', 'cache-control': 'no-store' });
+      let body = await readFile(p);
+      if (opts.transform) body = await opts.transform(url, body);
+      res.writeHead(200, { 'content-type': types[extname(p)] ?? 'application/octet-stream', 'cache-control': 'no-store', ...opts.headers });
       res.end(body);
     } catch { res.writeHead(404).end('not found'); }
   });

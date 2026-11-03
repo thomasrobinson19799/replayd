@@ -29,6 +29,9 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "patchedDependencies": {
+      "@rrweb/record@2.2.0": "patches/@rrweb__record@2.2.0.patch"
+    }
   }
 }

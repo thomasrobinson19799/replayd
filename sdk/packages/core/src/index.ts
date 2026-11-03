@@ -3,7 +3,7 @@ import type { Breadcrumb, Internal, ReplaydEvent, ReplaydOptions, User } from '.
 import { loaders } from './chunks';
 import { O, dsn, fetchRc, iurl, ready, resolve, stale } from './config';
 import { consoleHooks, navHooks } from './console';
-import { capture, ctx, errHandlers, fromErr, isErr, platform, resetFlood, ser, setOnErr, setPlatform, setUser as su, tags } from './errors';
+import { capture, ctx, errHandlers, fromErr, isErr, platform, resetFlood, ser, setOnErr, setPlatform, setUser as su, tags, user } from './errors';
 import { httpHooks } from './http';
 import { crumb, drain, rec, resetRing, setSink } from './ring';
 import { act, nextSeq, sInit, sSave, sampled, sess } from './session';
@@ -30,6 +30,7 @@ const I: Internal = {
   send,
   ie: () => ie,
   c: wsc,
+  m: () => ({ user, tags }),
   platform: 'web',
 };
 

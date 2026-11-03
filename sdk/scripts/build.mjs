@@ -1,6 +1,7 @@
 // Shared esbuild-based build for SDK packages. Usage (from a package dir): node ../../scripts/build.mjs <config.json>
 // config: { entries: {name: srcPath}, formats: ['esm'|'iife'|'cjs'], external: [...], platform, iifeName, splitting,
 //           iifeAliases: {importPath: srcPath} — swaps relative imports in the IIFE build only,
+//           iife: {name: srcPath | {src, aliases}} — per-entry aliases replace iifeAliases for that entry,
 //           terser: [distFile…] — second minification pass (terser, source maps chained) for size-critical files }
 import { build } from 'esbuild';
 import { minify } from 'terser';
@@ -17,8 +18,9 @@ const common = {
 };
 for (const fmt of cfg.formats ?? ['esm']) {
   if (fmt === 'iife') {
-    for (const [name, src] of Object.entries(cfg.iife ?? {})) {
-      const alias = Object.entries(cfg.iifeAliases ?? {});
+    for (const [name, e] of Object.entries(cfg.iife ?? {})) {
+      const src = typeof e === 'string' ? e : e.src;
+      const alias = Object.entries((typeof e === 'string' ? null : e.aliases) ?? cfg.iifeAliases ?? {});
       const plugins = alias.length ? [{
         name: 'iife-aliases',
         setup(b) {
@@ -40,7 +42,7 @@ for (const fmt of cfg.formats ?? ['esm']) {
 for (const f of cfg.terser ?? []) {
   const file = resolve(cwd, 'dist', f);
   const r = await minify(readFileSync(file, 'utf8'), {
-    ecma: 2022, module: !f.endsWith('.min.js'), compress: { passes: 2 }, mangle: true,
+    ecma: 2022, module: !f.endsWith('.min.js') && !Object.keys(cfg.iife ?? {}).some((n) => f === `${n}.js`), compress: { passes: 2 }, mangle: true,
     sourceMap: { content: readFileSync(`${file}.map`, 'utf8'), url: `${f.split('/').pop()}.map` },
   });
   writeFileSync(file, r.code);

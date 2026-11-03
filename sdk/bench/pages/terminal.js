@@ -1,6 +1,7 @@
 // Terminal mock: ~3k elements, ticking watchlist + order book at 10 Hz, Centrifugo-like WS at 200 msg/s.
 // Query params: ?ws=0 disables WS, ?text=content uses textContent (childList mutations) instead of nodeValue,
-// ?throttle=500 adds data-rp-throttle to watchlist + order book.
+// ?throttle=500 adds data-rp-throttle to watchlist + order book, ?book=0 stops the order-book repaint (lighter
+// "watchlist-only" variant).
 (() => {
   const q = new URLSearchParams(location.search);
   const SYMBOLS = ['EURUSD','GBPUSD','USDJPY','XAUUSD','XAGUSD','USDCHF','AUDUSD','NZDUSD','USDCAD','EURGBP','EURJPY','GBPJPY','BTCUSD','ETHUSD','US30','NAS100','SPX500','UKOIL','USOIL','EURCHF','AUDJPY','CADJPY','CHFJPY','EURAUD','EURCAD','EURNZD','GBPAUD','GBPCAD','GBPCHF','GBPNZD','NZDJPY','AUDCAD','AUDCHF','AUDNZD','NZDCAD','NZDCHF','USDSGD','USDHKD','USDTRY','USDZAR'];
@@ -80,6 +81,7 @@
       setText(c[1], d.b.toFixed(5)); setText(c[2], d.a.toFixed(5));
       setText(c[3], ((d.a - d.b) * 1e5).toFixed(1)); setText(c[4], ((tick % 7) - 3).toFixed(2) + '%'); setText(c[5], now);
     }
+    if (q.get('book') === '0') return;
     const mid = (latest.get('EURUSD')?.b ?? 1.08);
     for (let i = 0; i < 20; i++) {
       const b = levels.bids[i], a = levels.asks[i];

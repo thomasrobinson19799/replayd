@@ -1,0 +1,49 @@
+diff --git a/dist/record.js b/dist/record.js
+index c94b22e39bc3adb0b18f37e19b91be00d611f169..922a8be81fa27b6e187f09b0cc1b323731043f73 100644
+--- a/dist/record.js
++++ b/dist/record.js
+@@ -90,13 +90,13 @@ const testableAccessors = {
+     "previousSibling"
+   ],
+   ShadowRoot: ["host", "styleSheets"],
+-  Element: ["shadowRoot", "querySelector", "querySelectorAll"],
++  Element: ["shadowRoot"],
+   MutationObserver: []
+ };
+ const testableMethods = {
+   Node: ["contains", "getRootNode"],
+   ShadowRoot: ["getSelection"],
+-  Element: [],
++  Element: ["querySelector", "querySelectorAll"],
+   MutationObserver: ["constructor"]
+ };
+ const untaintedBasePrototype = {};
+@@ -1937,6 +1937,10 @@ class MutationBuffer {
+     __publicField(this, "processedNodeManager");
+     __publicField(this, "unattachedDoc");
+     __publicField(this, "processMutations", (mutations) => {
++      if (mutationHook) {
++        mutations = mutationHook(mutations);
++        if (!mutations.length) return;
++      }
+       mutations.forEach(this.processMutation);
+       this.emit();
+     });
+@@ -2437,6 +2441,7 @@ const callbackWrapper = (cb) => {
+   };
+   return rrwebWrapped;
+ };
++let mutationHook = null;
+ const mutationBuffers = /* @__PURE__ */ new Set();
+ function getEventTarget(event) {
+   try {
+@@ -5069,6 +5074,9 @@ record.takeFullSnapshot = (isCheckout) => {
+   takeFullSnapshot(isCheckout);
+ };
+ record.mirror = mirror;
++record.setMutationHook = (f) => {
++  mutationHook = f;
++};
+ export {
+   record
+ };

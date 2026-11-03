@@ -146,6 +146,8 @@ export interface Internal {
   ie: () => number;
   /** session counters for segment meta */
   c: { ws_disc: number };
+  /** user + tags for the segment `init` meta */
+  m: () => { user?: User; tags: Record<string, string> };
   platform: 'web' | 'capacitor-android';
 }
 

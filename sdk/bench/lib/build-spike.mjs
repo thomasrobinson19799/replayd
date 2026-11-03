@@ -8,7 +8,15 @@ await build({
   outfile: new URL(process.env.NOMIN ? '../dist/spike-glue.dev.js' : '../dist/spike-glue.js', import.meta.url).pathname,
   plugins: [{ name: 'instrument', setup(b) {
     b.onLoad({ filter: /@rrweb[\\/]record[\\/]dist[\\/]record\.js$/ }, async (a) => {
-      const src = await readFile(a.path, 'utf8');
+      let src = await readFile(a.path, 'utf8');
+      // @rrweb/record is now patched workspace-wide (patches/@rrweb__record@2.2.0.patch, D-04/D-05): undo the
+      // patch so this spike build still measures the variants it was written for
+      const patched = 'if (mutationHook) {\n        mutations = mutationHook(mutations);\n        if (!mutations.length) return;\n      }\n      ';
+      if (src.includes(patched)) {
+        src = src.replace(patched, '')
+          .replace('Element: ["shadowRoot"],\n  MutationObserver: []', 'Element: ["shadowRoot", "querySelector", "querySelectorAll"],\n  MutationObserver: []')
+          .replace('Element: ["querySelector", "querySelectorAll"],\n  MutationObserver: ["constructor"]', 'Element: [],\n  MutationObserver: ["constructor"]');
+      }
       if (!src.includes(needle)) throw new Error('instrumentation needle not found');
       const pm = `"processMutations", (mutations) => {
       mutations.forEach(this.processMutation);`;

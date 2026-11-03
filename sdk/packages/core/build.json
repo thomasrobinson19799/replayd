@@ -1,7 +1,10 @@
 {
-  "entries": { "index": "src/index.ts", "replay": "src/replay/index.ts", "capacitor": "src/capacitor/index.ts", "worker": "src/worker/index.ts", "wire": "src/wire.ts" },
+  "entries": { "index": "src/index.ts", "replay": "src/replay/index.ts", "capacitor": "src/capacitor/index.ts", "wire": "src/wire.ts" },
   "formats": ["esm", "iife"],
-  "iife": { "replayd.min": "src/iife.ts" },
+  "iife": {
+    "replayd.min": "src/iife.ts",
+    "worker": { "src": "src/worker/index.ts", "aliases": { "./config": "src/worker/cfg.ts" } }
+  },
   "iifeAliases": { "./chunks": "src/chunks-iife.ts" },
-  "terser": ["index.js", "replayd.min.js"]
+  "terser": ["index.js", "replayd.min.js", "worker.js"]
 }
