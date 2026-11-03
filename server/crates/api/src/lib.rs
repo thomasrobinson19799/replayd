@@ -135,7 +135,8 @@ pub fn router(st: Arc<ApiState>) -> Router {
             put(projects::set_member).delete(projects::remove_member),
         )
         .route("/api/projects/{pid}/issues", get(issues::list))
-        .route("/api/issues/{id}", get(issues::get_one))
+        .route("/api/issues", patch(issues::patch_bulk))
+        .route("/api/issues/{id}", get(issues::get_one).patch(issues::patch_one))
         .route("/api/issues/{id}/events", get(issues::events))
         .route("/api/projects/{pid}/sessions", get(sessions::list))
         .route("/api/sessions/{sid}", get(sessions::get_one))

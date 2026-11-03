@@ -57,6 +57,17 @@ export interface Issue {
   symbolicated: boolean
   resolved_in_release: string | null
   ignore_until: number | null
+  ignore_until_count: number | null
+  resolved_at: number | null
+  regressed_at: number | null
+}
+
+/** PATCH /api/issues[/:id] body (T-31) */
+export interface StatusChange {
+  status: IssueStatus
+  in_next_release?: boolean
+  ignore_until?: number
+  ignore_count?: number
 }
 
 export interface OrigFrame {

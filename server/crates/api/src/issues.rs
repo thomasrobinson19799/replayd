@@ -1,5 +1,6 @@
 //! Issue read endpoints (§5.11): list with filters, detail, events (keyset pagination).
-//! Status changes (`PATCH`) arrive with T-31.
+//! Status changes (T-31, PRD §6.1): resolve, resolve in next release, ignore (until date, until N more events,
+//! forever), reopen; single and bulk. Regressions are detected by the pipeline upsert (replayd-pipeline worker).
 
 use std::sync::Arc;
 
@@ -19,7 +20,8 @@ use crate::rbac::Perm;
 const ISSUE_COLS: &str = "id, project_id, level, source, type, title, culprit, status, \
     (extract(epoch from first_seen) * 1000)::bigint, (extract(epoch from last_seen) * 1000)::bigint, \
     first_release, last_release, platforms, times_seen, users_seen, symbolicated, resolved_in_release, \
-    (extract(epoch from ignore_until) * 1000)::bigint";
+    (extract(epoch from ignore_until) * 1000)::bigint, ignore_until_count, \
+    (extract(epoch from resolved_at) * 1000)::bigint, (extract(epoch from regressed_at) * 1000)::bigint";
 
 fn issue_json(r: &Row) -> Value {
     json!({
@@ -41,6 +43,9 @@ fn issue_json(r: &Row) -> Value {
         "symbolicated": r.get::<_, bool>(15),
         "resolved_in_release": r.get::<_, Option<String>>(16),
         "ignore_until": r.get::<_, Option<i64>>(17),
+        "ignore_until_count": r.get::<_, Option<i64>>(18),
+        "resolved_at": r.get::<_, Option<i64>>(19),
+        "regressed_at": r.get::<_, Option<i64>>(20),
     })
 }
 
@@ -241,4 +246,120 @@ pub async fn events(
         None
     };
     Ok(Json(json!({ "events": evs, "next_cursor": next })))
+}
+
+#[derive(Deserialize)]
+pub struct StatusReq {
+    /// `unresolved` | `resolved` | `ignored`
+    status: String,
+    /// with `resolved`: only events of a release other than the issue's current last release reopen it
+    #[serde(default)]
+    in_next_release: bool,
+    /// with `ignored`: until this time (ms)
+    ignore_until: Option<i64>,
+    /// with `ignored`: until N more events
+    ignore_count: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct BulkReq {
+    ids: Vec<i64>,
+    #[serde(flatten)]
+    change: StatusReq,
+}
+
+const SET_STATUS: &str = "UPDATE issues SET status = $3::text, \
+    resolved_at = CASE WHEN $3::text = 'resolved' THEN now() END, \
+    resolved_by = CASE WHEN $3::text = 'resolved' THEN $4::int END, \
+    resolved_in_release = CASE WHEN $3::text = 'resolved' AND $5::bool THEN last_release END, \
+    ignore_until = CASE WHEN $3::text = 'ignored' AND $6::bigint IS NOT NULL THEN to_timestamp($6::bigint / 1000.0) END, \
+    ignore_until_count = CASE WHEN $3::text = 'ignored' AND $7::bigint IS NOT NULL THEN times_seen + $7::bigint END \
+    WHERE id = ANY($1::bigint[]) AND project_id = ANY($2::int[])";
+
+async fn set_status(st: &ApiState, user: &Auth, ids: &[i64], ch: &StatusReq) -> ApiResult<Vec<Value>> {
+    if !matches!(ch.status.as_str(), "unresolved" | "resolved" | "ignored") {
+        return Err(ApiError::BadRequest(
+            "status: unresolved | resolved | ignored".into(),
+        ));
+    }
+    if ids.is_empty() || ids.len() > 500 {
+        return Err(ApiError::BadRequest("1–500 issue ids".into()));
+    }
+    if ch.ignore_count.is_some_and(|n| !(1..=1_000_000_000).contains(&n)) {
+        return Err(ApiError::BadRequest("ignore_count: 1…1e9".into()));
+    }
+    let c = st.pool.get().await?;
+    // every issue's project must allow the change (unknown ids / foreign projects → 404 like reads)
+    let rows = c
+        .query("SELECT id, project_id FROM issues WHERE id = ANY($1)", &[&ids])
+        .await?;
+    if rows.len() != ids.len() {
+        return Err(ApiError::NotFound);
+    }
+    let mut pids: Vec<i32> = rows.iter().map(|r| r.get(1)).collect();
+    pids.sort_unstable();
+    pids.dedup();
+    for p in &pids {
+        user.require(st, *p, Perm::View)?;
+        user.require(st, *p, Perm::ChangeIssueStatus)?;
+    }
+    let until = if ch.status == "ignored" {
+        ch.ignore_until
+    } else {
+        None
+    };
+    let count = if ch.status == "ignored" {
+        ch.ignore_count
+    } else {
+        None
+    };
+    c.execute(
+        SET_STATUS,
+        &[
+            &ids,
+            &pids,
+            &ch.status,
+            &user.user_id,
+            &ch.in_next_release,
+            &until,
+            &count,
+        ],
+    )
+    .await?;
+    let out = c
+        .query(
+            &format!("SELECT {ISSUE_COLS} FROM issues WHERE id = ANY($1) ORDER BY id"),
+            &[&ids],
+        )
+        .await?;
+    crate::audit(
+        st,
+        user,
+        "issue.status",
+        &format!("{ids:?}"),
+        json!({ "status": ch.status, "in_next_release": ch.in_next_release, "ignore_until": until, "ignore_count": count }),
+    )
+    .await?;
+    Ok(out.iter().map(issue_json).collect())
+}
+
+/// `PATCH /api/issues/:id`
+pub async fn patch_one(
+    State(st): State<Arc<ApiState>>,
+    user: Auth,
+    Path(id): Path<i64>,
+    Json(req): Json<StatusReq>,
+) -> ApiResult<Json<Value>> {
+    let mut v = set_status(&st, &user, &[id], &req).await?;
+    Ok(Json(v.pop().unwrap_or(Value::Null)))
+}
+
+/// `PATCH /api/issues` `{ids, status, …}`
+pub async fn patch_bulk(
+    State(st): State<Arc<ApiState>>,
+    user: Auth,
+    Json(req): Json<BulkReq>,
+) -> ApiResult<Json<Value>> {
+    let v = set_status(&st, &user, &req.ids, &req.change).await?;
+    Ok(Json(json!({ "issues": v })))
 }

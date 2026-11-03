@@ -231,8 +231,31 @@ const UPSERT: &str = "INSERT INTO issues (project_id, fingerprint, level, source
        times_seen = issues.times_seen + EXCLUDED.times_seen, \
        symbolicated = issues.symbolicated OR EXCLUDED.symbolicated, \
        platforms = ARRAY(SELECT DISTINCT unnest(issues.platforms || EXCLUDED.platforms) ORDER BY 1), \
-       level = CASE WHEN issues.level = 'error' OR EXCLUDED.level = 'error' THEN 'error' ELSE EXCLUDED.level END \
-     RETURNING id, (xmax = 0) AS inserted";
+       level = CASE WHEN issues.level = 'error' OR EXCLUDED.level = 'error' THEN 'error' ELSE EXCLUDED.level END, \
+       status = CASE WHEN (REGRESSED) OR (UNIGNORED) THEN 'unresolved' ELSE issues.status END, \
+       resolved_at = CASE WHEN (REGRESSED) THEN NULL ELSE issues.resolved_at END, \
+       resolved_in_release = CASE WHEN (REGRESSED) THEN NULL ELSE issues.resolved_in_release END, \
+       ignore_until = CASE WHEN (UNIGNORED) THEN NULL ELSE issues.ignore_until END, \
+       ignore_until_count = CASE WHEN (UNIGNORED) THEN NULL ELSE issues.ignore_until_count END, \
+       regressed_at = CASE WHEN (REGRESSED) THEN statement_timestamp() ELSE issues.regressed_at END \
+     RETURNING id, (xmax = 0) AS inserted, regressed_at IS NOT DISTINCT FROM statement_timestamp() AS regressed";
+
+/// T-31 (§6.1): a resolved issue seen again after it was resolved is a regression. Resolved "in next release":
+/// only events of a release other than the one current at resolve time count (events without a release never do).
+const REGRESSED: &str = "issues.status = 'resolved' AND EXCLUDED.last_seen > issues.resolved_at AND \
+     (issues.resolved_in_release IS NULL OR (EXCLUDED.last_release IS NOT NULL AND EXCLUDED.last_release <> issues.resolved_in_release))";
+/// Ignored until a date / until N more events: back to unresolved (no regression alert). Ignored forever stays.
+const UNIGNORED: &str = "issues.status = 'ignored' AND ((issues.ignore_until IS NOT NULL AND EXCLUDED.last_seen > issues.ignore_until) \
+     OR (issues.ignore_until_count IS NOT NULL AND issues.times_seen + EXCLUDED.times_seen >= issues.ignore_until_count))";
+
+fn upsert_sql() -> &'static str {
+    static S: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    S.get_or_init(|| {
+        UPSERT
+            .replace("REGRESSED", REGRESSED)
+            .replace("UNIGNORED", UNIGNORED)
+    })
+}
 
 const EVENT_COLUMNS: &[&str] = &[
     "id",
@@ -317,7 +340,7 @@ pub async fn flush(sh: &Shared, batch: &mut Vec<Processed>) -> Result<usize, rep
     let mut issue_ids: HashMap<(i32, [u8; 20]), i64> = HashMap::with_capacity(groups.len());
     let mut user_ids: Vec<i64> = vec![];
     let mut user_incs: Vec<i32> = vec![];
-    let stmt = c.prepare_cached(UPSERT).await?;
+    let stmt = c.prepare_cached(upsert_sql()).await?;
     for ((pid, fp), g) in &groups {
         let row = c
             .query_one(
@@ -342,7 +365,16 @@ pub async fn flush(sh: &Shared, batch: &mut Vec<Processed>) -> Result<usize, rep
             .await?;
         let id: i64 = row.get(0);
         let inserted: bool = row.get(1);
+        let regressed: bool = row.get(2);
         issue_ids.insert((*pid, *fp), id);
+        if regressed {
+            metrics::counter!("replayd_issues_regressed_total", "project" => pid.to_string()).increment(1);
+            sh.signal(IssueSignal::Regression {
+                project_id: *pid,
+                issue_id: id,
+                level: g.level.to_string(),
+            });
+        }
         if inserted {
             metrics::counter!("replayd_issues_new_total", "project" => pid.to_string()).increment(1);
             sh.signal(IssueSignal::New {

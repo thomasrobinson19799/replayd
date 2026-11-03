@@ -103,8 +103,14 @@ watch(id, load)
             />{{ issue.title }}
           </h1>
           <p class="mt-1 text-sm text-gray-600">
-            {{ issue.culprit }} · {{ issue.source }} · <span class="capitalize">{{ issue.status }}</span>
+            {{ issue.culprit }} · {{ issue.source }}
           </p>
+          <IssueStatusBar
+            class="mt-2"
+            :issue="issue"
+            :can-change="issue.can_change_status"
+            @updated="(u) => issue && Object.assign(issue, u)"
+          />
         </div>
         <dl class="grid grid-cols-4 gap-x-6 text-sm">
           <dt class="text-gray-500">

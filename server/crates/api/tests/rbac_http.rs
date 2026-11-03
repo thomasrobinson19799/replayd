@@ -116,6 +116,15 @@ async fn rbac_matrix_over_http() {
         .await
         .unwrap();
     }
+    let iid: i64 = c
+        .query_one(
+            "INSERT INTO issues (project_id, fingerprint, level, source, title, first_seen, last_seen, last_release, times_seen) \
+             VALUES ($1, '\\x01', 'error', 'onerror', 'TypeError: x', now(), now(), '1.0.0', 3) RETURNING id",
+            &[&pid],
+        )
+        .await
+        .unwrap()
+        .get(0);
     let projects = Arc::new(ProjectCache::default());
     projects.reload(&pool).await.unwrap();
     let st = ApiState::new(
@@ -185,6 +194,19 @@ async fn rbac_matrix_over_http() {
             Some(json!({"slug": format!("x-{tag}"), "name": "X"})),
             [S::CREATED, S::FORBIDDEN, S::FORBIDDEN, S::FORBIDDEN, S::FORBIDDEN],
         ),
+        // T-31: issue status — members and up, viewers read-only, outsiders don't see the issue
+        (
+            Method::PATCH,
+            format!("/api/issues/{iid}"),
+            Some(json!({"status": "resolved", "in_next_release": true})),
+            [S::OK, S::OK, S::OK, S::FORBIDDEN, S::NOT_FOUND],
+        ),
+        (
+            Method::PATCH,
+            "/api/issues".into(),
+            Some(json!({"ids": [iid], "status": "ignored", "ignore_count": 5})),
+            [S::OK, S::OK, S::OK, S::FORBIDDEN, S::NOT_FOUND],
+        ),
         (
             Method::GET,
             "/api/me".into(),
@@ -198,6 +220,41 @@ async fn rbac_matrix_over_http() {
             assert_eq!(code, expect[i], "{m} {uri} as {}", roles[i]);
         }
     }
+    // the last allowed bulk change applied: ignored until 5 more events (times_seen 3 → threshold 8)
+    let r = c
+        .query_one(
+            "SELECT status, ignore_until_count, resolved_in_release FROM issues WHERE id = $1",
+            &[&iid],
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.get::<_, String>(0), "ignored");
+    assert_eq!(r.get::<_, Option<i64>>(1), Some(8));
+    assert_eq!(r.get::<_, Option<String>>(2), None);
+    // resolve in next release pins the current last release
+    let (code, v) = call(
+        &app,
+        Some(&sessions[2]),
+        Method::PATCH,
+        &format!("/api/issues/{iid}"),
+        Some(json!({"status": "resolved", "in_next_release": true})),
+        true,
+    )
+    .await;
+    assert_eq!(code, S::OK);
+    assert_eq!(v["resolved_in_release"], "1.0.0");
+    assert_eq!(v["status"], "resolved");
+    // bad status → 400
+    let (code, _) = call(
+        &app,
+        Some(&sessions[0]),
+        Method::PATCH,
+        &format!("/api/issues/{iid}"),
+        Some(json!({"status": "deleted"})),
+        true,
+    )
+    .await;
+    assert_eq!(code, S::BAD_REQUEST);
     // the telegram bot token is never returned in clear
     let (code, _) = call(
         &app,

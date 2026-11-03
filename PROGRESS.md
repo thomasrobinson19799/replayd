@@ -43,7 +43,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 ## M4 — Issue workflow, alerts, retention, remote config, roles
 | ID | Task | Status | Notes / blockers |
 |---|---|---|---|
-| T-31 | Issue status: resolve / next release / ignore / regression | todo | |
+| T-31 | Issue status: resolve / next release / ignore / regression | done | Migration 0002 (ignore_until_count, regressed_at); transitions in the issue upsert + Regression signal (D-23); PATCH single + bulk with RBAC + audit; dashboard status bar (resolve, resolve in next release, ignore forever / 1 h / 24 h / 7 d / next 10 / 100 events, reopen) and list bulk actions. Tests: pipeline issue_status_db, RBAC HTTP matrix, dashboard status.test, e2e/issue-status.e2e.mjs. |
 | T-32 | Telegram alerts per project | todo | |
 | T-33 | Retention: partitions + disk cleanup | todo | |
 | T-34 | Remote config editor in dashboard | todo | |

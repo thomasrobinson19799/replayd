@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { Issue } from '~/utils/types'
+import type { Issue, StatusChange } from '~/utils/types'
+import { ignoreActions, reopenAction, resolveAction, resolveNextAction } from '~/utils/status'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,6 +41,35 @@ async function load(silent = false) {
   }
   finally {
     loading.value = false
+  }
+}
+
+// bulk status changes (T-31)
+const selected = ref(new Set<number>())
+const allSelected = computed(() => issues.value.length > 0 && issues.value.every((i) => selected.value.has(i.id)))
+function toggle(id: number) {
+  const s = new Set(selected.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  selected.value = s
+}
+function toggleAll() {
+  selected.value = allSelected.value ? new Set() : new Set(issues.value.map((i) => i.id))
+}
+const bulkActions = computed(() => [resolveAction, resolveNextAction, ignoreActions()[0]!, reopenAction])
+const bulkBusy = ref(false)
+async function bulk(change: StatusChange) {
+  bulkBusy.value = true
+  try {
+    await api.patch(`/issues`, { ids: [...selected.value], ...change })
+    selected.value = new Set()
+    await load(true)
+  }
+  catch (e) {
+    error.value = errorMessage(e)
+  }
+  finally {
+    bulkBusy.value = false
   }
 }
 
@@ -181,10 +211,35 @@ watch(pid, () => apply())
     >
       {{ error }}
     </p>
+    <div
+      v-if="selected.size"
+      class="mb-2 flex flex-wrap items-center gap-2 text-sm"
+      data-testid="bulk-bar"
+    >
+      <span class="text-gray-600">{{ selected.size }} selected</span>
+      <button
+        v-for="a in bulkActions"
+        :key="a.key"
+        class="rounded border border-gray-300 bg-white px-2 py-0.5 hover:bg-gray-50 disabled:opacity-50"
+        :disabled="bulkBusy"
+        :data-testid="`bulk-${a.key}`"
+        @click="bulk(a.change)"
+      >
+        {{ a.label }}
+      </button>
+    </div>
     <div class="overflow-hidden rounded-lg border border-gray-200 bg-white">
       <table class="w-full text-sm">
         <thead class="bg-gray-50 text-left text-gray-500">
           <tr>
+            <th class="w-8 py-2 pl-4">
+              <input
+                type="checkbox"
+                :checked="allSelected"
+                aria-label="Select all"
+                @change="toggleAll"
+              >
+            </th>
             <th class="px-4 py-2 font-medium">
               Issue
             </th>
@@ -208,7 +263,7 @@ watch(pid, () => apply())
         <tbody>
           <tr v-if="loading && !issues.length">
             <td
-              colspan="6"
+              colspan="7"
               class="px-4 py-6 text-center text-gray-500"
             >
               Loading…
@@ -216,7 +271,7 @@ watch(pid, () => apply())
           </tr>
           <tr v-else-if="!issues.length">
             <td
-              colspan="6"
+              colspan="7"
               class="px-4 py-6 text-center text-gray-500"
             >
               No issues match.
@@ -228,6 +283,15 @@ watch(pid, () => apply())
             class="border-t border-gray-100 hover:bg-gray-50"
             data-testid="issue-row"
           >
+            <td class="py-2 pl-4">
+              <input
+                type="checkbox"
+                :checked="selected.has(i.id)"
+                :aria-label="`Select ${i.title}`"
+                data-testid="issue-select"
+                @change="toggle(i.id)"
+              >
+            </td>
             <td class="px-4 py-2">
               <NuxtLink
                 :to="`/projects/${pid}/issues/${i.id}`"
