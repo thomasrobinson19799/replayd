@@ -36,7 +36,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | ID | Task | Status | Notes / blockers |
 |---|---|---|---|
 | T-24 | Canvas snapshotter + asset section + player plugin | skipped | Out of scope v1 (D-01) |
-| T-25 | WS tab in player | todo | |
+| T-25 | WS tab in player | done | WS tab: connections with lifecycle (open/close code, frames), Centrifugo channels parsed from pushes + commands (newline batches, truncated frames tolerated), channel / direction / search filters, rows synced to the playhead, pretty-printed frame detail, abnormal closes as timeline markers. Unit tests (dashboard/test/ws.test.ts); e2e/sdk-replay.e2e.mjs shows 17 WS items from a real recording. |
 | T-26 | Capacitor module: lifecycle, device info, IndexedDB queue, direct transport | todo | |
 | T-30 | Source maps: upload API, CLI, Vite plugin, symbolication, reprocess | todo | |
 
