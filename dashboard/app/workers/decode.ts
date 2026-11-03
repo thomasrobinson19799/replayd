@@ -6,8 +6,12 @@
  */
 import { RplStream, rewriteAssets } from '../utils/rpl'
 
+/** First message: start the download right away (in parallel with the session API call). */
 export interface DecodeStart {
   url: string
+}
+/** Second message: asset rewrite settings from the session API; decoding waits for it. */
+export interface DecodeConfig {
   rewriteFrom: string[]
   assetBase: string | null
 }
@@ -25,8 +29,17 @@ async function gunzipText(b: Uint8Array): Promise<string> {
   return await new Response(s).text()
 }
 
-self.onmessage = async (e: MessageEvent<DecodeStart>) => {
-  const { url, rewriteFrom, assetBase } = e.data
+let setCfg: (c: DecodeConfig) => void = () => {}
+const cfg = new Promise<DecodeConfig>((r) => {
+  setCfg = r
+})
+
+self.onmessage = (e: MessageEvent<DecodeStart | DecodeConfig>) => {
+  if ('url' in e.data) void run(e.data.url)
+  else setCfg(e.data)
+}
+
+async function run(url: string) {
   const t0 = performance.now()
   try {
     const res = await fetch(url, { credentials: 'include' })
@@ -37,7 +50,7 @@ self.onmessage = async (e: MessageEvent<DecodeStart>) => {
     let bytes = 0
     let frames = 0
     // frames are decoded in arrival order; gunzip of one frame overlaps the network read of the next
-    let chain: Promise<void> = Promise.resolve()
+    let chain: Promise<unknown> = cfg
     for (;;) {
       const { done, value } = await reader.read()
       if (done) break
@@ -45,6 +58,7 @@ self.onmessage = async (e: MessageEvent<DecodeStart>) => {
       for (const f of rpl.push(value)) {
         frames++
         chain = chain.then(async () => {
+          const { rewriteFrom, assetBase } = await cfg
           try {
             const text = rewriteAssets(await gunzipText(f.events), rewriteFrom, assetBase)
             post({ type: 'frame', seq: f.seq, t0: f.t0, t1: f.t1, flags: f.flags, events: JSON.parse(text) })

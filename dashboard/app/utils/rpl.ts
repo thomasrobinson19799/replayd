@@ -13,7 +13,7 @@ export const FLAG_GAP = 1
 export const FLAG_HAS_ERROR = 2
 const MAX_FRAME = 4 * 1024 * 1024
 
-export interface Frame {
+export interface RplFrame {
   seq: number
   t0: number
   t1: number
@@ -28,7 +28,7 @@ function uuid(b: Uint8Array): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
 }
 
-export function parseBody(b: Uint8Array): Pick<Frame, 'events' | 'assets'> {
+export function parseBody(b: Uint8Array): Pick<RplFrame, 'events' | 'assets'> {
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength)
   const need = (p: number, n: number) => {
     if (p + n > b.length) throw new RangeError('truncated body')
@@ -43,7 +43,7 @@ export function parseBody(b: Uint8Array): Pick<Frame, 'events' | 'assets'> {
   need(p, 2)
   const n = dv.getUint16(p, true)
   p += 2
-  const assets: Frame['assets'] = []
+  const assets: RplFrame['assets'] = []
   for (let i = 0; i < n; i++) {
     need(p, 9)
     const id = dv.getUint32(p, true)
@@ -66,9 +66,9 @@ export class RplStream {
   private seen = new Set<number>()
   duplicates = 0
 
-  push(chunk: Uint8Array): Frame[] {
+  push(chunk: Uint8Array): RplFrame[] {
     this.append(chunk)
-    const out: Frame[] = []
+    const out: RplFrame[] = []
     if (this.sid === null) {
       if (this.len - this.pos < HEADER_LEN) return out
       const b = this.buf

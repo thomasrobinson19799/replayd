@@ -2,7 +2,7 @@
 import { Replayer } from '@rrweb/replay'
 import '@rrweb/replay/dist/style.css'
 import type { SessionDetail } from '~/utils/types'
-import type { DecodeMsg, DecodeStart } from '~/workers/decode'
+import type { DecodeConfig, DecodeMsg, DecodeStart } from '~/workers/decode'
 import { clock, collect, emptyPanels, lastAtOrBefore, sortPanels, type Marker, type Panels, type RrEvent } from '~/utils/replay'
 
 const route = useRoute()
@@ -88,8 +88,11 @@ function startReplayer(events: RrEvent[]) {
     insertStyleRules: [],
   })
   replayer.on('fullsnapshot-rebuilded', () => {
-    const w = window as unknown as { __rpFirstFrameMs?: number }
-    w.__rpFirstFrameMs ??= Math.round(performance.now())
+    const w = window as unknown as { __rpFirstFrameMs?: number, __rpFirstFrameLoad?: unknown }
+    if (w.__rpFirstFrameMs === undefined) {
+      w.__rpFirstFrameMs = Math.round(performance.now())
+      w.__rpFirstFrameLoad = { ...loaded }
+    }
     fit()
   })
   replayer.on('resize', () => nextTick(fit))
@@ -133,7 +136,32 @@ function onFrame(m: Extract<DecodeMsg, { type: 'frame' }>) {
   }
 }
 
+function startWorker() {
+  worker = new Worker(new URL('../../workers/decode.ts', import.meta.url), { type: 'module' })
+  worker.onmessage = (ev: MessageEvent<DecodeMsg>) => {
+    const m = ev.data
+    if (m.type === 'frame') onFrame(m)
+    else if (m.type === 'progress') {
+      loaded.bytes = m.bytes
+      loaded.total = m.total
+    }
+    else if (m.type === 'done') {
+      loaded.done = true
+      ;(window as unknown as { __rpDoneMs?: number }).__rpDoneMs = Math.round(performance.now())
+      if (!replayer) status.value = pending.length ? 'Recording has no full snapshot yet.' : 'No replay data for this session.'
+    }
+    else if (m.type === 'error') {
+      status.value = ''
+      error.value = m.message.includes('404') ? 'No replay recorded for this session.' : m.message
+    }
+  }
+  // the download starts in parallel with the session API call; decoding waits for the asset config
+  const start: DecodeStart = { url: new URL(`${config.public.apiBase}/sessions/${sid.value}/recording`, location.origin).toString() }
+  worker.postMessage(start)
+}
+
 async function load() {
+  startWorker()
   try {
     session.value = await api.get<SessionDetail>(`/sessions/${sid.value}`)
     const s = session.value
@@ -142,31 +170,14 @@ async function load() {
     for (const e of s.errors) {
       panels.value.markers.push({ ts: e.ts, kind: e.level === 'warning' ? 'warning' : 'error', label: e.title })
     }
-    worker = new Worker(new URL('../../workers/decode.ts', import.meta.url), { type: 'module' })
-    worker.onmessage = (ev: MessageEvent<DecodeMsg>) => {
-      const m = ev.data
-      if (m.type === 'frame') onFrame(m)
-      else if (m.type === 'progress') {
-        loaded.bytes = m.bytes
-        loaded.total = m.total
-      }
-      else if (m.type === 'done') {
-        loaded.done = true
-        if (!replayer) status.value = pending.length ? 'Recording has no full snapshot yet.' : 'No replay data for this session.'
-      }
-      else if (m.type === 'error') {
-        status.value = ''
-        error.value = m.message.includes('404') ? 'No replay recorded for this session.' : m.message
-      }
-    }
-    const start: DecodeStart = {
-      url: new URL(`${config.public.apiBase}/sessions/${sid.value}/recording`, location.origin).toString(),
-      rewriteFrom: s.asset_rewrite_from ?? [],
+    const cfg: DecodeConfig = {
+      rewriteFrom: [...(s.asset_rewrite_from ?? [])], // plain array: reactive proxies cannot be cloned
       assetBase: s.asset_base_url,
     }
-    worker.postMessage(start)
+    worker?.postMessage(cfg)
   }
   catch (e) {
+    worker?.terminate()
     status.value = ''
     error.value = errorMessage(e)
   }
@@ -205,6 +216,11 @@ function onScrub(e: MouseEvent) {
 const consoleColor = (l: string) => (l === 'error' ? 'text-red-600' : l === 'warn' ? 'text-amber-600' : 'text-gray-700')
 
 onMounted(() => {
+  // read-only probe for the e2e player benchmark (e2e/player.e2e.mjs)
+  ;(window as unknown as { __rpPlayer?: unknown }).__rpPlayer = {
+    loaded,
+    time: () => replayer?.getCurrentTime() ?? -1,
+  }
   load()
   window.addEventListener('resize', fit)
 })

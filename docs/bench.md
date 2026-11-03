@@ -74,6 +74,37 @@ Spike numbers for rrweb on the terminal mock are in [spikes/T-01.md](spikes/T-01
 | Date | Test | Result |
 |---|---|---|
 | 2026-11-03 | `e2e/issues.e2e.mjs`: error thrown in test app → row visible in an open dashboard issues list | 3.89 s / 3.92 s / 3.89 s (budget 5 s) |
+| 2026-11-03 | `e2e/player.e2e.mjs`: 60-min session, navigation → first replayed frame (`__rpFirstFrameMs`), 20 Mbit/s | 506 / 542 / 552 ms (budget 1 s) ✔ |
+| 2026-11-03 | same, 5 Mbit/s | 718 / 718 / 706 ms ✔ |
+
+### Replay player — T-23
+Fixture: `e2e/gen-replay.mjs` records the terminal mock (`sdk/bench/pages/terminal.html?hist=60`: live 200 msg/s WS,
+10 Hz repaint, scripted mouse/scroll/typing) with rrweb and the PRD §4.6 options for 30 s, coalesces text mutations to
+1 per node per 1000 ms (the byte effect of `data-rp-throttle="1000"`), and repeats the incremental events with
+shifted timestamps up to 60 min, with a Meta + FullSnapshot checkout every 10 min plus SDK custom events (network
+every 10 s, console every 15 s, warning every 2 min, error every 10 min, nav every 5 min, WS frames and closes). It
+cuts 5 s segments, gzips them and writes `.rpl` frames with `encodeSegment`/`splitSegment` from `@replayd/core/wire`.
+`INSTALL=1` copies the file into the stack and inserts the sessions row.
+
+| Fixture | Value |
+|---|---|
+| Duration / frames / events | 60 min / 704 frames / 25,998 events |
+| `.rpl` size | 4.69 MB (1.27 KB/s; raw JSON 28.4 MB) |
+| First frame (Meta + FullSnapshot of a 2.8k-node DOM) | 24.2 KB |
+
+`e2e/player.e2e.mjs` (Chromium, CDP network throttling incl. 20 ms latency; time from navigation start, so it
+includes SPA boot, `/api/me`, the session API call, the decode worker and the rrweb rebuild). 3 runs each:
+
+| Link | First frame | Bytes downloaded at first frame | Full download | Playing while downloading | Seek to 45:00 |
+|---|---|---|---|---|---|
+| 20 Mbit/s | 506 / 542 / 552 ms | 82–115 KB of 4.69 MB | 3.0–3.6 s | yes (playhead +0.7 s in 0.7 s) | renders ✔ |
+| 5 Mbit/s | 718 / 718 / 706 ms | 37–43 KB | 8.1 s | yes | renders ✔ |
+
+Fixes found by this test: the first run at 5 Mbit/s took 1,179 ms. nginx served the 212 KB player chunk
+uncompressed, and the recording download only started after the session API call returned. Now Nuxt precompresses
+assets (`compressPublicAssets`, nginx `gzip_static`), API JSON is gzipped on the fly (`.rpl` is not: its frames are
+already gzip), and the decode worker starts the download in parallel with the session API call. Asset-rewrite
+settings come in a second message, and decoding waits for it.
 
 ### Session list query — T-22
 `psql -f scripts/seed-sessions.sql` (140,000 sessions = 14 days × 10,000/day; 40% APK, 10% with errors,

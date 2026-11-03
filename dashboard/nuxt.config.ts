@@ -28,6 +28,8 @@ export default defineNuxtConfig({
   },
   // `make dev`: the dashboard dev server proxies the API to the local replayd
   nitro: {
+    // precompressed .gz next to every static asset, served by nginx `gzip_static` (no per-request CPU)
+    compressPublicAssets: { gzip: true, brotli: false },
     devProxy: {
       '/api': { target: process.env.REPLAYD_API_URL ?? 'http://127.0.0.1:8080/api', changeOrigin: true },
     },

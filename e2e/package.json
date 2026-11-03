@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "issues": "node issues.e2e.mjs"
+    "issues": "node issues.e2e.mjs",
+    "player": "node player.e2e.mjs",
+    "gen-replay": "node gen-replay.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"
