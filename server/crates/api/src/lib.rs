@@ -77,7 +77,15 @@ impl ApiState {
         data_dir: std::path::PathBuf,
         maps: Arc<replayd_pipeline::SourceMaps>,
     ) -> Result<Arc<Self>, replayd_db::DbError> {
-        let st = Self::new(pool, projects, public_url, secure_cookies, trusted_proxies, data_dir).await?;
+        let st = Self::new(
+            pool,
+            projects,
+            public_url,
+            secure_cookies,
+            trusted_proxies,
+            data_dir,
+        )
+        .await?;
         let mut st = Arc::try_unwrap(st).unwrap_or_else(|_| unreachable!("fresh Arc"));
         st.maps = Some(maps);
         Ok(Arc::new(st))

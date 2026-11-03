@@ -41,7 +41,10 @@ async fn authorize(st: &ApiState, pid: &str, headers: &HeaderMap) -> ApiResult<i
     let p = st.projects.get(pid).ok_or(ApiError::Unauthorized)?;
     let c = st.pool.get().await?;
     let row = c
-        .query_opt("SELECT upload_token_hash FROM projects WHERE id = $1", &[&p.row.id])
+        .query_opt(
+            "SELECT upload_token_hash FROM projects WHERE id = $1",
+            &[&p.row.id],
+        )
         .await?
         .ok_or(ApiError::Unauthorized)?;
     let stored: Vec<u8> = row.get(0);
@@ -80,7 +83,10 @@ pub async fn create_release(
         return Err(ApiError::BadRequest("invalid release".into()));
     }
     upsert_release(&st, id, &req.version).await?;
-    Ok((StatusCode::CREATED, Json(json!({ "project_id": id, "version": req.version }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "project_id": id, "version": req.version })),
+    ))
 }
 
 pub async fn upload(
@@ -93,7 +99,10 @@ pub async fn upload(
     if !valid_release(&release) {
         return Err(ApiError::BadRequest("invalid release".into()));
     }
-    let maps = st.maps.clone().ok_or(ApiError::Internal("source maps disabled".into()))?;
+    let maps = st
+        .maps
+        .clone()
+        .ok_or(ApiError::Internal("source maps disabled".into()))?;
     let dir = maps.release_path(id, &release);
     tokio::fs::create_dir_all(&dir)
         .await
@@ -106,7 +115,9 @@ pub async fn upload(
     {
         let name = field.name().unwrap_or_default().to_string();
         if !name.starts_with("~/") || name.len() > 1024 || name.contains("..") {
-            return Err(ApiError::BadRequest(format!("part name must be the file's ~/path: {name:.80}")));
+            return Err(ApiError::BadRequest(format!(
+                "part name must be the file's ~/path: {name:.80}"
+            )));
         }
         let data = field
             .bytes()
@@ -138,16 +149,25 @@ pub async fn upload(
     let rel = release.clone();
     tokio::spawn(async move {
         match reprocess(&st2, &maps, id, &rel).await {
-            Ok((ev, is)) => tracing::info!(project_id = id, release = %rel, events = ev, issues = is, "reprocessed"),
+            Ok((ev, is)) => {
+                tracing::info!(project_id = id, release = %rel, events = ev, issues = is, "reprocessed")
+            }
             Err(e) => tracing::warn!(project_id = id, release = %rel, error = %e, "reprocess failed"),
         }
     });
-    Ok(Json(json!({ "release": release, "files": files.len(), "reprocess": true })))
+    Ok(Json(
+        json!({ "release": release, "files": files.len(), "reprocess": true }),
+    ))
 }
 
 /// Re-symbolicates stored frames of `release` events whose issue is not symbolicated yet (§5.5 step 6).
 /// Returns (events updated, issues marked symbolicated).
-pub async fn reprocess(st: &ApiState, maps: &SourceMaps, project_id: i32, release: &str) -> ApiResult<(usize, usize)> {
+pub async fn reprocess(
+    st: &ApiState,
+    maps: &SourceMaps,
+    project_id: i32,
+    release: &str,
+) -> ApiResult<(usize, usize)> {
     let c = st.pool.get().await?;
     let rows = c
         .query(
@@ -160,7 +180,9 @@ pub async fn reprocess(st: &ApiState, maps: &SourceMaps, project_id: i32, releas
     let mut updated = 0;
     let mut issues: std::collections::HashMap<i64, Option<String>> = std::collections::HashMap::new();
     let upd = c
-        .prepare_cached("UPDATE events SET payload = jsonb_set(payload, '{frames}', $3) WHERE id = $1 AND ts = $2")
+        .prepare_cached(
+            "UPDATE events SET payload = jsonb_set(payload, '{frames}', $3) WHERE id = $1 AND ts = $2",
+        )
         .await?;
     for r in rows {
         let frames: Option<Value> = r.get(3);
@@ -180,7 +202,13 @@ pub async fn reprocess(st: &ApiState, maps: &SourceMaps, project_id: i32, releas
             .find(|f| f.in_app)
             .or(frames.first())
             .and_then(|f| f.orig.as_ref())
-            .map(|o| if o.function.is_empty() { o.file.clone() } else { format!("{} ({})", o.function, o.file) });
+            .map(|o| {
+                if o.function.is_empty() {
+                    o.file.clone()
+                } else {
+                    format!("{} ({})", o.function, o.file)
+                }
+            });
         issues.entry(r.get(2)).or_insert(culprit);
     }
     for (iid, culprit) in &issues {

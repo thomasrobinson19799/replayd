@@ -176,7 +176,16 @@ pub fn process_job(sh: &Shared, job: &EventJob) -> Vec<Processed> {
     let rules = sh.rules_for(job.project_id);
     let out: Vec<Processed> = events
         .into_iter()
-        .map(|e| event::process_with(e, job.project_id, job.received_ms as i64, &ua, &rules, sh.maps.as_deref()))
+        .map(|e| {
+            event::process_with(
+                e,
+                job.project_id,
+                job.received_ms as i64,
+                &ua,
+                &rules,
+                sh.maps.as_deref(),
+            )
+        })
         .collect();
     let mut ids = sh.event_ids.lock();
     let before = out.len();

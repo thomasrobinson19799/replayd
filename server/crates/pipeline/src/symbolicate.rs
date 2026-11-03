@@ -123,11 +123,13 @@ impl SourceMaps {
             }
         }
         let file = self.release_path(project_id, release).join(map_file(path));
-        let parsed = std::fs::read(&file).ok().and_then(|b| match sourcemap::decode_slice(&b) {
-            Ok(DecodedMap::Regular(m)) => Some(Arc::new(m)),
-            Ok(DecodedMap::Index(i)) => i.flatten().ok().map(Arc::new),
-            _ => None,
-        });
+        let parsed = std::fs::read(&file)
+            .ok()
+            .and_then(|b| match sourcemap::decode_slice(&b) {
+                Ok(DecodedMap::Regular(m)) => Some(Arc::new(m)),
+                Ok(DecodedMap::Index(i)) => i.flatten().ok().map(Arc::new),
+                _ => None,
+            });
         let mut c = self.cache.lock();
         if c.map.len() >= CACHE
             && let Some(old) = c.map.iter().min_by_key(|(_, v)| v.0).map(|(k, _)| k.clone())
@@ -159,13 +161,18 @@ impl SourceMaps {
                 file: clean_source(src),
                 line: line as u32 + 1,
                 col: tok.get_src_col() + 1,
-                function: tok.get_name().unwrap_or(&f.function).to_string(),
+                // the token name is the original identifier at the position; no name → unknown (the minified
+                // function name would be misleading)
+                function: tok.get_name().unwrap_or_default().to_string(),
                 ..Default::default()
             };
             if let Some(content) = sm.get_source_contents(tok.get_src_id()) {
                 let lines: Vec<&str> = content.lines().collect();
                 if line < lines.len() {
-                    o.pre = lines[line.saturating_sub(CONTEXT)..line].iter().map(|l| clip(l)).collect();
+                    o.pre = lines[line.saturating_sub(CONTEXT)..line]
+                        .iter()
+                        .map(|l| clip(l))
+                        .collect();
                     o.context = clip(lines[line]);
                     o.post = lines[line + 1..(line + 1 + CONTEXT).min(lines.len())]
                         .iter()
@@ -192,8 +199,12 @@ mod tests {
     fn write_map(dir: &Path, path: &str) {
         let mut b = sourcemap::SourceMapBuilder::new(Some("a.js"));
         let src = b.add_source("../../src/order.ts");
-        b.set_source_contents(src, Some("// order\nexport function placeOrder(o) {\n    return o.price.toFixed(2);\n}\n"));
-        b.add_raw(0, 9, 2, 4, Some(src), b.add_name("price").into(), false);
+        b.set_source_contents(
+            src,
+            Some("// order\nexport function placeOrder(o) {\n    return o.price.toFixed(2);\n}\n"),
+        );
+        let name = b.add_name("price");
+        b.add_raw(0, 9, 2, 4, Some(src), Some(name), false);
         b.add_raw(0, 30, 0, 0, Some(src), None, false);
         let sm = b.into_sourcemap();
         let mut out = vec![];
@@ -214,7 +225,10 @@ mod tests {
     fn cleans_sources() {
         assert_eq!(clean_source("webpack:///./src/a.ts"), "src/a.ts");
         assert_eq!(clean_source("../../app/components/X.vue"), "app/components/X.vue");
-        assert_eq!(clean_source("../node_modules/vue/dist/x.js"), "node_modules/vue/dist/x.js");
+        assert_eq!(
+            clean_source("../node_modules/vue/dist/x.js"),
+            "node_modules/vue/dist/x.js"
+        );
     }
 
     #[test]
@@ -244,7 +258,10 @@ mod tests {
         assert_eq!(o.pre, vec!["// order", "export function placeOrder(o) {"]);
         assert_eq!(o.post, vec!["}"]);
         // other release: no map
-        let mut f2 = vec![Frame { orig: None, ..frames[0].clone() }];
+        let mut f2 = vec![Frame {
+            orig: None,
+            ..frames[0].clone()
+        }];
         assert!(!sm.symbolicate(7, "2.0.0", &mut f2));
         std::fs::remove_dir_all(&tmp).ok();
     }

@@ -187,3 +187,12 @@ Playwright `setOffline`). Real-device run: T-51 APK checklist.
 | | online + App `resume` → issue visible in the API | 1.0 s |
 | | queues after drain | 0 / 0 |
 | | session | platform `capacitor-android`, app `1.42.0 (142)`, device `SM-A525F`, 8 segments, no gap |
+
+### Source maps — T-30
+`e2e/sourcemaps.e2e.mjs`: esbuild-minified TS bundle, maps uploaded with `@replayd/cli`.
+
+| Date | Check | Result |
+|---|---|---|
+| 2026-11-03 | web (127.0.0.1) + APK (localhost origin, Capacitor stub) errors of release A → same issue | ✔ one issue, platforms web + capacitor-android |
+| | frames | `src/order.ts:4:23`, context + 3 lines before / 1 after, culprit `src/order.ts` |
+| | release B: error before upload → unsymbolicated; upload → reprocessed | ✔ frames updated, issue `symbolicated = true` (< 1 s) |
