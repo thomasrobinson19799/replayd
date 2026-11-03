@@ -125,6 +125,44 @@ async fn rbac_matrix_over_http() {
         .await
         .unwrap()
         .get(0);
+    // T-35: a recording with a network body and a WS frame, readable by members, filtered for viewers
+    let data_dir = std::env::temp_dir().join(format!("rp-rbac-{tag}"));
+    let sid = uuid::Uuid::now_v7();
+    let day: String = c
+        .query_one(
+            "INSERT INTO sessions (id, project_id, started_at, last_at, file_day) VALUES ($1, $2, now(), now(), (now() AT TIME ZONE 'UTC')::date) RETURNING file_day::text",
+            &[&sid, &pid],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    {
+        use std::io::Write;
+        let events = json!([
+            {"type": 5, "timestamp": 1, "data": {"tag": "network", "payload": {"method": "GET", "url": "https://api/x", "status": 200, "resBody": "SECRET_BODY", "reqHeaders": {"x-a": "SECRET_HEADER"}}}},
+            {"type": 5, "timestamp": 2, "data": {"tag": "ws", "payload": {"k": "frame", "id": 1, "dir": "in", "raw": "SECRET_FRAME"}}}
+        ]);
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        gz.write_all(events.to_string().as_bytes()).unwrap();
+        let gz = gz.finish().unwrap();
+        let mut body = (gz.len() as u32).to_le_bytes().to_vec();
+        body.extend_from_slice(&gz);
+        body.extend_from_slice(&0u16.to_le_bytes());
+        let mut f = replayd_common::rpl::encode_header(sid.as_bytes()).to_vec();
+        let h = replayd_common::rpl::FrameHeader {
+            len: body.len() as u32,
+            seq: 0,
+            t0: 1,
+            t1: 2,
+            received_at: 0,
+            flags: 0,
+        };
+        f.extend_from_slice(&h.encode());
+        f.extend_from_slice(&body);
+        let dir = data_dir.join(pid.to_string()).join(&day);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("{}.rpl", sid.as_hyphenated())), f).unwrap();
+    }
     let projects = Arc::new(ProjectCache::default());
     projects.reload(&pool).await.unwrap();
     let st = ApiState::new(
@@ -133,7 +171,7 @@ async fn rbac_matrix_over_http() {
         "https://replay.example.com".into(),
         true,
         vec![],
-        std::env::temp_dir(),
+        data_dir.clone(),
     )
     .await
     .unwrap();
@@ -244,6 +282,57 @@ async fn rbac_matrix_over_http() {
     assert_eq!(code, S::OK);
     assert_eq!(v["resolved_in_release"], "1.0.0");
     assert_eq!(v["status"], "resolved");
+    // T-35: recording — member sees bodies + frames, viewer gets the filtered copy, outsider 404
+    let rec = |i: usize| {
+        let app = app.clone();
+        let s = &sessions[i];
+        let uri = format!("/api/sessions/{sid}/recording");
+        async move {
+            let req = Request::get(&uri)
+                .header(header::COOKIE, &s.cookie)
+                .body(Body::empty())
+                .unwrap();
+            let r = app.oneshot(req).await.unwrap();
+            let st = r.status();
+            let b = axum::body::to_bytes(r.into_body(), 1 << 24).await.unwrap();
+            let mut text = String::new();
+            if st == S::OK {
+                let idx = replayd_common::rpl::index(&b).unwrap();
+                for f in idx.frames {
+                    let body = &b[f.body_range()];
+                    let n = u32::from_le_bytes(body[..4].try_into().unwrap()) as usize;
+                    let mut d = flate2::read::GzDecoder::new(&body[4..4 + n]);
+                    std::io::Read::read_to_string(&mut d, &mut text).unwrap();
+                }
+            }
+            (st, text)
+        }
+    };
+    let (code, member) = rec(2).await;
+    assert_eq!(code, S::OK);
+    assert!(
+        member.contains("SECRET_BODY") && member.contains("SECRET_FRAME") && member.contains("SECRET_HEADER")
+    );
+    let (code, viewer) = rec(3).await;
+    assert_eq!(code, S::OK);
+    for s in ["SECRET_BODY", "SECRET_FRAME", "SECRET_HEADER"] {
+        assert!(!viewer.contains(s), "viewer recording leaks {s}: {viewer}");
+    }
+    assert!(viewer.contains("\"status\":200"), "metadata kept: {viewer}");
+    assert_eq!(rec(4).await.0, S::NOT_FOUND);
+    // session detail tells the dashboard what the user may see
+    let (_, v) = call(
+        &app,
+        Some(&sessions[3]),
+        Method::GET,
+        &format!("/api/sessions/{sid}"),
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(v["can_view_sensitive"], false);
+    std::fs::remove_dir_all(&data_dir).ok();
+
     // bad status → 400
     let (code, _) = call(
         &app,

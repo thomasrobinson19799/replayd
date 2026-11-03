@@ -294,7 +294,18 @@ pub async fn recording(
     let ended: bool = r.get(4);
     let day: String = r.get(29);
     let sid_norm: String = r.get(0);
-    let path = recording_path(&st.data_dir, pid, &day, &sid_norm);
+    let mut path = recording_path(&st.data_dir, pid, &day, &sid_norm);
+    // viewers get a copy without network headers/bodies and WS frame contents (T-35)
+    if !user.can(&st, pid, Perm::ViewSensitive) {
+        let src = path.clone();
+        path = tokio::task::spawn_blocking(move || crate::redact_rpl::ensure(&src))
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+            .map_err(|e| match e.kind() {
+                std::io::ErrorKind::NotFound => ApiError::NotFound,
+                _ => ApiError::Internal(e.to_string()),
+            })?;
+    }
     let mut f = tokio::fs::File::open(&path)
         .await
         .map_err(|_| ApiError::NotFound)?;

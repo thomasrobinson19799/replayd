@@ -217,7 +217,7 @@ const wsList = computed(() => {
 const wsIdx = computed(() => lastAtOrBefore(wsList.value, cur.value))
 const wsLabel = (it: WsItem) =>
   it.k === 'frame'
-    ? (it.binary ? `[binary ${it.size ?? 0} B]` : (it.raw ?? ''))
+    ? (it.binary ? `[binary ${it.size ?? 0} B]` : it.data.redacted ? `[hidden · ${Number(it.data.len ?? 0)} chars]` : (it.raw ?? ''))
     : `${it.k}${it.code != null ? ` ${it.code}` : ''} ${it.url ?? ''}`
 const markers = computed<Marker[]>(() => {
   void panelsVersion.value
@@ -358,6 +358,13 @@ onBeforeUnmount(() => {
       </div>
 
       <aside class="flex h-[calc(60vh+4.5rem)] flex-col rounded border border-gray-200 bg-white text-xs">
+        <p
+          v-if="session && !session.can_view_sensitive"
+          class="border-b border-amber-200 bg-amber-50 px-2 py-1 text-amber-800"
+          data-testid="viewer-notice"
+        >
+          Viewer role: network headers/bodies and WebSocket frame contents are removed by the server.
+        </p>
         <nav class="flex border-b border-gray-200">
           <button
             v-for="t in (['console', 'network', 'ws', 'errors', 'crumbs', 'device'] as const)"

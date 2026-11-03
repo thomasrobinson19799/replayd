@@ -5,6 +5,7 @@ pub mod error;
 pub mod issues;
 pub mod projects;
 pub mod rbac;
+pub mod redact_rpl;
 pub mod sessions;
 pub mod sourcemaps;
 pub mod users;

@@ -47,7 +47,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | T-32 | Telegram alerts per project | done | replayd-alerts: signal consumer, new/regression/spike, dedup 30 min (memory + alerts_sent), 20 msg/min per chat, 3 retries with retry_after, HTML message with issue + replay links, token never logged (D-24). Settings page tabs (General, Keys & DSN, Members, Telegram + test message, Fingerprint rules). Tests: unit (dedup, rate limit, spike window, message, retries/no token), e2e/alerts.e2e.mjs against a mock Bot API (8/8). |
 | T-33 | Retention: partitions + disk cleanup | done | storage::retention (daily 03:00 Tehran): partition drops below the largest retention, per-project row deletes for shorter ones, issues past cut-off, day dirs + deleted projects, source maps 30 days after last event (D-25). Tests: retention_db (16-day seed → 14/7 days, idempotent); bench 150k-session 15-day seed → 14 days in 139 ms (same as 15k: O(days)). |
 | T-34 | Remote config editor in dashboard | done | Settings → Remote config (kill switch, rates, WS gates, TTL, redaction extensions, effective preview); `v` bumped per save; SDK fetches config with cache: 'no-cache' so pick-up ≤ TTL (D-26). e2e/remote-config.e2e.mjs: served 4 ms after save; APK keeps cache within TTL, applies the change after 10 min. |
-| T-35 | Viewer-role redaction of bodies/frames | todo | |
+| T-35 | Viewer-role redaction of bodies/frames | done | api::redact_rpl: viewer recordings filtered server-side (network headers/bodies, WS raw, assets; undecodable → gap), cached per source length under `<day>/.redacted/` (D-27); player notice + `[hidden · N chars]` WS rows. Tests: redact_rpl unit tests, RBAC HTTP: member sees SECRET_BODY/FRAME/HEADER, viewer none (metadata kept), outsider 404. |
 
 ## M5 — Adapters, WordPress, observability, benchmarks, migration
 | ID | Task | Status | Notes / blockers |
@@ -80,6 +80,7 @@ Before stopping for any reason: commit, push, and update this section if the wor
 ```
 
 ## Session log
+- 2026-11-03: M4 complete (T-31…T-35).
 - 2026-11-03: M2 complete (T-20…T-23), M3 complete (T-25, T-26, T-30; T-24 skipped). Owner accepted the measured 4× per-batch figure (D-20). Snapshot budget open on this VM (T-51).
 - 2026-11-03: M1 complete (T-12…T-18). M2: T-21 done early (server-only, no conflicts). GitHub push access fixed by owner.
 - 2026-11-03: M0 complete (T-01, T-03, T-04, T-10, T-11). Push to GitHub blocked (403: Claude GitHub App has no write access to thomasrobinson19799/replayd); commits are local until access is fixed.
