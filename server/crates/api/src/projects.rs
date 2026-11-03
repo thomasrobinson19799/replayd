@@ -464,3 +464,33 @@ pub async fn remove_member(
     audit(&st, &user, "member.remove", &format!("{id}/{uid}"), json!({})).await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+/// `POST /api/projects/:pid/telegram/test` — sends a test message with the stored bot token / chat (admin).
+pub async fn telegram_test(
+    State(st): State<Arc<ApiState>>,
+    user: Auth,
+    Path(pid): Path<String>,
+) -> ApiResult<Json<Value>> {
+    let id = resolve(&st, &pid)?;
+    user.require(&st, id, Perm::ProjectSettings)?;
+    let alerts = st
+        .alerts
+        .clone()
+        .ok_or(ApiError::Internal("alerts disabled".into()))?;
+    let c = st.pool.get().await?;
+    let row = c
+        .query_one("SELECT slug, telegram FROM projects WHERE id = $1", &[&id])
+        .await?;
+    let slug: String = row.get(0);
+    let tg: Option<Value> = row.get(1);
+    let cfg = replayd_alerts::TgConfig::from_json(tg.as_ref())
+        .ok_or_else(|| ApiError::BadRequest("Telegram is not configured or disabled".into()))?;
+    let text = format!(
+        "✅ replayd test message for <b>{}</b>",
+        replayd_alerts::html(&slug)
+    );
+    replayd_alerts::send(alerts.http(), alerts.api_base(), &cfg, &text)
+        .await
+        .map_err(ApiError::BadRequest)?;
+    Ok(Json(json!({ "sent": true })))
+}

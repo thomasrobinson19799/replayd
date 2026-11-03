@@ -81,11 +81,23 @@ async fn main() -> anyhow::Result<()> {
     projects.spawn_refresh(pool.clone(), Duration::from_secs(cfg.ingest.project_refresh_secs));
 
     let (events_tx, events_rx) = mpsc::channel::<EventJob>(cfg.ingest.events_queue);
-    // Error pipeline: 3 workers share the bounded queue (§5.5). Alert signals are wired in T-32.
+    // Error pipeline: 3 workers share the bounded queue (§5.5).
     // Source maps (T-30): one cache shared by the pipeline (lookups) and the API (uploads invalidate it).
     let maps = replayd_pipeline::SourceMaps::new(&cfg.data_dir);
-    let pipeline =
-        replayd_pipeline::Shared::with_maps(pool.clone(), projects.clone(), None, Some(maps.clone()));
+    // Telegram alerts (T-32): bounded signal channel from the pipeline (try_send; full → counted, dropped).
+    let (signals_tx, signals_rx) = mpsc::channel(10_000);
+    let alerts = replayd_alerts::Alerts::new(
+        pool.clone(),
+        projects.clone(),
+        cfg.public_url.clone(),
+        cfg.telegram_api.clone(),
+    );
+    let pipeline = replayd_pipeline::Shared::with_maps(
+        pool.clone(),
+        projects.clone(),
+        Some(signals_tx),
+        Some(maps.clone()),
+    );
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let mut workers = replayd_pipeline::spawn(pipeline, events_rx, 3, shutdown_rx.clone());
 
@@ -129,7 +141,10 @@ async fn main() -> anyhow::Result<()> {
         cfg.data_dir.clone(),
         maps,
     )
-    .await?;
+    .await?
+    .with_alerts(alerts.clone());
+    // ends when the pipeline (the only sender) is dropped
+    let _alerts_task = replayd_alerts::spawn(alerts, signals_rx);
 
     let app = base_router()
         .merge(replayd_ingest::router(ingest, cfg.sdk_dir.clone()))

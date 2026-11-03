@@ -23,6 +23,8 @@ pub struct Config {
     pub bootstrap_admin_password: Option<String>,
     /// Set `Secure` on the dashboard cookie (disable only for plain-HTTP local dev).
     pub secure_cookies: bool,
+    /// Telegram Bot API base (tests point it at a mock).
+    pub telegram_api: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -58,6 +60,7 @@ impl Default for Config {
             bootstrap_admin_email: None,
             bootstrap_admin_password: None,
             secure_cookies: true,
+            telegram_api: "https://api.telegram.org".into(),
         }
     }
 }
@@ -117,6 +120,9 @@ impl Config {
         }
         if let Some(v) = get("REPLAYD_SDK_DIR") {
             self.sdk_dir = v.into();
+        }
+        if let Some(v) = get("REPLAYD_TELEGRAM_API") {
+            self.telegram_api = v;
         }
         if let Some(v) = get("REPLAYD_PUBLIC_URL") {
             self.public_url = v;

@@ -21,6 +21,7 @@ regex = "1.11"
 replayd-db.workspace = true
 replayd-ingest.workspace = true
 replayd-pipeline.workspace = true
+replayd-alerts.workspace = true
 sourcemap = "9"
 serde.workspace = true
 serde_json.workspace = true

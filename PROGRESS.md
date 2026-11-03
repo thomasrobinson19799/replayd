@@ -44,7 +44,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | ID | Task | Status | Notes / blockers |
 |---|---|---|---|
 | T-31 | Issue status: resolve / next release / ignore / regression | done | Migration 0002 (ignore_until_count, regressed_at); transitions in the issue upsert + Regression signal (D-23); PATCH single + bulk with RBAC + audit; dashboard status bar (resolve, resolve in next release, ignore forever / 1 h / 24 h / 7 d / next 10 / 100 events, reopen) and list bulk actions. Tests: pipeline issue_status_db, RBAC HTTP matrix, dashboard status.test, e2e/issue-status.e2e.mjs. |
-| T-32 | Telegram alerts per project | todo | |
+| T-32 | Telegram alerts per project | done | replayd-alerts: signal consumer, new/regression/spike, dedup 30 min (memory + alerts_sent), 20 msg/min per chat, 3 retries with retry_after, HTML message with issue + replay links, token never logged (D-24). Settings page tabs (General, Keys & DSN, Members, Telegram + test message, Fingerprint rules). Tests: unit (dedup, rate limit, spike window, message, retries/no token), e2e/alerts.e2e.mjs against a mock Bot API (8/8). |
 | T-33 | Retention: partitions + disk cleanup | todo | |
 | T-34 | Remote config editor in dashboard | todo | |
 | T-35 | Viewer-role redaction of bodies/frames | todo | |

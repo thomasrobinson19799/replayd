@@ -37,6 +37,8 @@ pub struct ApiState {
     pub data_dir: std::path::PathBuf,
     /// Source maps (shared with the error pipeline so uploads invalidate its cache), T-30.
     pub maps: Option<Arc<replayd_pipeline::SourceMaps>>,
+    /// Telegram sender (test message from the settings tab), T-32.
+    pub alerts: Option<Arc<replayd_alerts::Alerts>>,
     login_ip: BucketMap<IpAddr>,
     login_email: BucketMap<u64>,
 }
@@ -58,6 +60,7 @@ impl ApiState {
             secure_cookies,
             trusted_proxies,
             maps: None,
+            alerts: None,
             data_dir,
             login_ip: BucketMap::new(50_000),
             login_email: BucketMap::new(50_000),
@@ -89,6 +92,13 @@ impl ApiState {
         let mut st = Arc::try_unwrap(st).unwrap_or_else(|_| unreachable!("fresh Arc"));
         st.maps = Some(maps);
         Ok(Arc::new(st))
+    }
+
+    /// Adds the Telegram sender (call before `router`).
+    pub fn with_alerts(self: Arc<Self>, alerts: Arc<replayd_alerts::Alerts>) -> Arc<Self> {
+        let mut st = Arc::try_unwrap(self).unwrap_or_else(|_| unreachable!("not shared yet"));
+        st.alerts = Some(alerts);
+        Arc::new(st)
     }
 
     pub async fn reload_members(&self) -> ApiResult<()> {
@@ -129,6 +139,7 @@ pub fn router(st: Arc<ApiState>) -> Router {
                 .delete(projects::delete),
         )
         .route("/api/projects/{pid}/keys/rotate", post(projects::rotate_key))
+        .route("/api/projects/{pid}/telegram/test", post(projects::telegram_test))
         .route("/api/projects/{pid}/members", get(projects::members))
         .route(
             "/api/projects/{pid}/members/{uid}",

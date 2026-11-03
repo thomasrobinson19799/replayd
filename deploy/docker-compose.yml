@@ -45,6 +45,10 @@ services:
       REPLAYD_BOOTSTRAP_ADMIN_EMAIL: ${REPLAYD_BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
       REPLAYD_BOOTSTRAP_ADMIN_PASSWORD: ${REPLAYD_BOOTSTRAP_ADMIN_PASSWORD:-change-me-now}
       REPLAYD_LOG: info
+      # Telegram Bot API base (e2e points it at a mock on the host)
+      REPLAYD_TELEGRAM_API: ${REPLAYD_TELEGRAM_API:-https://api.telegram.org}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - replay-data:/data
     expose: ["8080"]
