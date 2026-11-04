@@ -91,6 +91,15 @@ impl Writers {
         written: Option<tokio::sync::mpsc::Sender<Written>>,
     ) -> std::io::Result<Arc<Self>> {
         std::fs::create_dir_all(&cfg.data_dir)?;
+        // Fail at start, not per segment: an unwritable data dir would otherwise ack and drop every replay.
+        let probe = cfg.data_dir.join(".write-probe");
+        std::fs::write(&probe, b"").map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!("data dir {} is not writable: {e}", cfg.data_dir.display()),
+            )
+        })?;
+        std::fs::remove_file(&probe)?;
         let mut shards = Vec::with_capacity(cfg.shards);
         let mut handles = Vec::with_capacity(cfg.shards);
         for i in 0..cfg.shards.max(1) {

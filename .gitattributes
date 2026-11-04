@@ -1,0 +1,8 @@
+# Keep LF on every platform: Atlas checksums migrations byte-for-byte, and
+# scripts/configs are copied into Linux containers.
+* text=auto eol=lf
+*.bin binary
+*.rpl binary
+*.gz binary
+*.png binary
+*.ico binary

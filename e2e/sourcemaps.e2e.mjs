@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { BASE, login, serve } from './lib.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const { build } = await import(`${root}sdk/node_modules/esbuild/lib/main.js`);
+const { build } = await import(new URL('../sdk/node_modules/esbuild/lib/main.js', import.meta.url).href);
 const dist = `${root}sdk/packages/core/dist`;
 const cli = `${root}sdk/packages/cli/dist/index.js`;
 

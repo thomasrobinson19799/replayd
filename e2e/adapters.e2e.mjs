@@ -2,7 +2,7 @@
 // with the adapter's context. Each example is built against a fresh project (DSN baked in at build time).
 // Prereqs: `make up`, `pnpm -C sdk build`, `pnpm -C examples install`. Env ONLY=vue,react,… to run a subset.
 import { chromium } from 'playwright';
-import { execFileSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { login, serve } from './lib.mjs';
@@ -32,7 +32,7 @@ try {
       : { routes: { ...chunks, '/': () => readFileSync(`${root}examples/html/index.html`, 'utf8').replace('__DSN__', dsn) } });
     const project = await api('POST', '/projects', { slug, name: slug, allowed_origins: [srv.origin] });
     dsn = project.dsn;
-    if (a.dir) execFileSync('pnpm', ['build'], { cwd: `${root}examples/${a.dir}`, env: { ...process.env, [a.env]: dsn }, stdio: 'ignore' });
+    if (a.dir) execSync('pnpm build', { cwd: `${root}examples/${a.dir}`, env: { ...process.env, [a.env]: dsn }, stdio: 'ignore' });
     const page = await (await browser.newContext()).newPage();
     const pageErrors = [];
     page.on('pageerror', (e) => pageErrors.push(e.message));

@@ -99,23 +99,30 @@ pub const DISABLE_HEADER: HeaderName = HeaderName::from_static("x-replayd-disabl
 const EXPOSE: HeaderValue = HeaderValue::from_static("Retry-After, X-Replayd-Disable, ETag");
 
 pub fn router(state: Arc<IngestState>, sdk_dir: PathBuf) -> Router {
-    let sdk = tower_http::services::ServeDir::new(sdk_dir);
+    // Versioned SDK paths are immutable; `latest/` must be revalidated or sites never see a new release.
+    let sdk_service = |dir: PathBuf, cache: &'static str| {
+        tower::ServiceBuilder::new()
+            .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static(cache),
+            ))
+            .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+                header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                HeaderValue::from_static("*"),
+            ))
+            .service(tower_http::services::ServeDir::new(dir))
+    };
     Router::new()
         .route("/ingest/{pid}/events", post(events).options(preflight))
         .route("/ingest/{pid}/replay", post(replay).options(preflight))
         .route("/ingest/{pid}/config", get(config).options(preflight))
         .nest_service(
+            "/ingest/sdk/latest",
+            sdk_service(sdk_dir.join("latest"), "public, max-age=300"),
+        )
+        .nest_service(
             "/ingest/sdk",
-            tower::ServiceBuilder::new()
-                .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-                    header::CACHE_CONTROL,
-                    HeaderValue::from_static("public, max-age=31536000, immutable"),
-                ))
-                .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-                    header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                    HeaderValue::from_static("*"),
-                ))
-                .service(sdk),
+            sdk_service(sdk_dir, "public, max-age=31536000, immutable"),
         )
         .with_state(state)
 }
@@ -211,7 +218,7 @@ fn record(project: &str, kind: &'static str, code: StatusCode, started: Instant,
     }
 }
 
-async fn read_body(req: Request, limit: usize) -> Result<Bytes, Response> {
+async fn read_body(req: Request, limit: usize) -> Result<Bytes, StatusCode> {
     if let Some(len) = req
         .headers()
         .get(header::CONTENT_LENGTH)
@@ -219,11 +226,11 @@ async fn read_body(req: Request, limit: usize) -> Result<Bytes, Response> {
         .and_then(|v| v.parse::<usize>().ok())
         && len > limit
     {
-        return Err(status(StatusCode::PAYLOAD_TOO_LARGE));
+        return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
     axum::body::to_bytes(req.into_body(), limit)
         .await
-        .map_err(|_| status(StatusCode::PAYLOAD_TOO_LARGE))
+        .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)
 }
 
 fn accepted(origin: &Option<HeaderValue>) -> Response {
@@ -268,9 +275,9 @@ async fn events(
         .map(|s| s[..s.len().min(512)].to_string());
     let body = match read_body(req, st.cfg.max_events_body).await {
         Ok(b) => b,
-        Err(r) => {
-            record(&slug, "events", r.status(), started, 0);
-            return with_cors(r, &g.origin);
+        Err(code) => {
+            record(&slug, "events", code, started, 0);
+            return with_cors(status(code), &g.origin);
         }
     };
     let n = body.len();
@@ -320,9 +327,9 @@ async fn replay(
     };
     let body = match read_body(req, st.cfg.max_replay_body).await {
         Ok(b) => b,
-        Err(r) => {
-            record(&slug, "replay", r.status(), started, 0);
-            return with_cors(r, &g.origin);
+        Err(code) => {
+            record(&slug, "replay", code, started, 0);
+            return with_cors(status(code), &g.origin);
         }
     };
     let n = body.len();

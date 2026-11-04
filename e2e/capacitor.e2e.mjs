@@ -83,9 +83,13 @@ try {
   log({ step: 'queues after drain', ...left });
   if (left?.segments !== 0 || left?.events !== 0) failed = true;
   // session: APK platform + device meta, recording covers the offline period
-  const sessions = await api('GET', `/projects/${slug}/sessions`);
-  const s = sessions.sessions[0];
-  const d = s && (await api('GET', `/sessions/${s.id}`));
+  // the aggregator flushes every 3 s: wait for the drained segments to be counted
+  let d = null;
+  for (let i = 0; i < 20 && !(d?.segments >= 5); i++) {
+    if (d) await new Promise((r) => setTimeout(r, 500));
+    const s = (await api('GET', `/projects/${slug}/sessions`)).sessions[0];
+    d = s ? await api('GET', `/sessions/${s.id}`) : {};
+  }
   log({ step: 'session', platform: d?.platform, app_version: d?.app_version, device: d?.device_model, segments: d?.segments, has_gap: d?.has_gap });
   if (d?.platform !== 'capacitor-android' || d?.device_model !== 'SM-A525F' || !(d?.segments >= 5)) failed = true;
   await ctx.close();

@@ -85,6 +85,7 @@ async fn rbac_matrix_over_http() {
     };
     let tag = std::process::id();
     let c = pool.get().await.unwrap();
+    replayd_db::ensure_partitions(&c, 1, 7).await.unwrap();
     let hash = auth::hash_password("test-password-123").unwrap();
     let roles = ["super", "admin", "member", "viewer", "outsider"];
     let mut ids = vec![];

@@ -80,6 +80,7 @@ Before stopping for any reason: commit, push, and update this section if the wor
 ```
 
 ## Session log
+- 2026-11-04: Local verification on Windows 11 + Docker Desktop (WordPress, APK device and app-repo tasks skipped by owner). All checks + e2e (issues, sdk-replay, issue-status, capacitor, sourcemaps, remote-config, adapters, player, alerts, observability) green after fixes recorded in D-30. Windows notes: Playwright's browser CDN was unreachable, so e2e ran against installed Chrome via a `NODE_OPTIONS=--import=<preload>` that sets `channel: 'chrome'`; no `make` → run the Makefile steps directly.
 - 2026-11-03: M5: T-40, T-50 done; T-41 (staging access), T-51 (device), T-52 (app repos) blocked on external access.
 - 2026-11-03: M4 complete (T-31…T-35).
 - 2026-11-03: M2 complete (T-20…T-23), M3 complete (T-25, T-26, T-30; T-24 skipped). Owner accepted the measured 4× per-batch figure (D-20). Snapshot budget open on this VM (T-51).

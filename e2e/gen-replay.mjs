@@ -20,9 +20,8 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { gzipSync } from 'node:zlib';
 import { randomBytes } from 'node:crypto';
-import { dirname, join } from 'node:path';
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { dirname } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -33,8 +32,8 @@ const SEG_MS = 5000;
 const CHECKOUT_MS = 10 * 60_000;
 const out = process.argv[2] ?? `${root}data/gen/session-${MINUTES}m.rpl`;
 
-const { encodeSegment, splitSegment, RPL_FLAG_HAS_ERROR } = await import(`${root}sdk/packages/core/dist/wire.js`);
-const { startServer } = await import(`${root}sdk/bench/server.mjs`);
+const { encodeSegment, splitSegment, RPL_FLAG_HAS_ERROR } = await import(new URL('../sdk/packages/core/dist/wire.js', import.meta.url).href);
+const { startServer } = await import(new URL('../sdk/bench/server.mjs', import.meta.url).href);
 
 // ---------- 1. record ----------
 async function record() {
@@ -248,16 +247,13 @@ INSERT INTO sessions (id, project_id, started_at, last_at, ended, duration_ms, e
 VALUES ('${sid}', ${pid}, to_timestamp(${tStart} / 1000.0), to_timestamp(${end} / 1000.0), true, ${end - tStart},
   'http://127.0.0.1/pages/terminal.html', 'http://127.0.0.1/pages/terminal.html', 'gen-1.0.0', 'bench', 'web',
   'Chrome', '140.0', 'Linux', ${rec.vw}, ${rec.vh}, 'en-US', ${stats.errs}, ${stats.warns}, ${stats.clicks}, ${stats.frames}, ${stats.gzBytes}, '${day}');`);
-  // the replayd image is distroless (no shell): stage <pid>/<day>/<sid>.rpl locally and `docker cp` the tree
+  // the replayd image is distroless (no shell): a throwaway container on the same /data volume writes
+  // <pid>/<day>/<sid>.rpl and hands it to the distroless `nonroot` user (65532) — works from any host OS
   const rd = container('replayd');
-  const stage = mkdtempSync(join(tmpdir(), 'rpl-'));
-  mkdirSync(join(stage, pid, day), { recursive: true, mode: 0o755 });
-  copyFileSync(file, join(stage, pid, day, `${sid}.rpl`));
-  chmodSync(join(stage, pid, day, `${sid}.rpl`), 0o644);
-  // -a keeps uid/gid: the tree must belong to the distroless `nonroot` user (65532) that writes /data
-  execFileSync('chown', ['-R', '65532:65532', stage]);
-  sh('docker', ['cp', '-a', `${stage}/.`, `${rd}:/data/`]);
-  rmSync(stage, { recursive: true, force: true });
+  const dir = `/data/${pid}/${day}`;
+  execFileSync('docker', ['run', '--rm', '-i', '--volumes-from', rd, '--user', '0', 'alpine:3.22', 'sh', '-c',
+    `mkdir -p ${dir} && cat > ${dir}/${sid}.rpl && chown -R 65532:65532 /data/${pid}`],
+  { input: readFileSync(file), stdio: ['pipe', 'inherit', 'inherit'] });
   return { project: slug, project_id: Number(pid), day };
 }
 

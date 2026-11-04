@@ -1,0 +1,8 @@
+# Build context of deploy/nginx/Dockerfile is the repo root: never send host build output
+# (node_modules from another OS breaks the in-image install).
+.git
+**/node_modules
+**/.nuxt
+**/.output
+server/target
+data

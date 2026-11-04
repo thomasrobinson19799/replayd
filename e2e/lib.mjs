@@ -1,7 +1,7 @@
 // Shared e2e helpers: API login/project setup against a running stack, tiny static server for test apps.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
+import { extname, isAbsolute, join, normalize } from 'node:path';
 
 export const BASE = process.env.E2E_BASE ?? 'http://localhost:8088';
 export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'admin@example.com';
@@ -44,15 +44,16 @@ export function serve({ dir, routes = {} }) {
     try {
       if (path in routes) {
         const v = routes[path];
-        const body = typeof v === 'function' ? v() : v.startsWith('/') ? await readFile(v) : v;
+        const body = typeof v === 'function' ? v() : isAbsolute(v) ? await readFile(v) : v;
         res.writeHead(200, { 'content-type': types[extname(path)] ?? 'text/html', 'access-control-allow-origin': '*' });
         return res.end(body);
       }
       if (!dir) throw new Error('404');
       const p = normalize(join(dir, path === '/' ? 'index.html' : path));
-      if (!p.startsWith(dir)) throw new Error('403');
+      if (!p.startsWith(normalize(dir))) throw new Error('403');
+      const body = await readFile(p);
       res.writeHead(200, { 'content-type': types[extname(p)] ?? 'application/octet-stream', 'access-control-allow-origin': '*' });
-      res.end(await readFile(p));
+      res.end(body);
     } catch {
       res.writeHead(404).end();
     }

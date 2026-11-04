@@ -6,6 +6,8 @@
  *   replayd releases new --project fxglory-terminal --release "$APP_VERSION"
  * Env: REPLAYD_URL, REPLAYD_TOKEN (project upload token; never printed).
  */
+import { realpathSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { newRelease, uploadSourcemaps } from './upload';
 
 export { newRelease, tildePath, uploadSourcemaps, type UploadOptions } from './upload';
@@ -53,6 +55,16 @@ export async function main(argv: string[], env: Record<string, string | undefine
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('/replayd')) {
+/** true when run as the entry script (`node dist/index.js`, a `.bin` symlink or a Windows `.cmd` shim) */
+export function isEntry(argv1: string | undefined, self: string): boolean {
+  if (!argv1) return false;
+  try {
+    return pathToFileURL(realpathSync(argv1)).href === self;
+  } catch {
+    return false;
+  }
+}
+
+if (isEntry(process.argv[1], import.meta.url)) {
   void main(process.argv.slice(2)).then((c) => process.exit(c));
 }

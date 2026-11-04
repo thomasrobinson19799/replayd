@@ -10,10 +10,13 @@ RUN --mount=type=secret,id=ca,required=false \
     --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     if [ -s /run/secrets/ca ]; then export CARGO_HTTP_CAINFO=/run/secrets/ca SSL_CERT_FILE=/run/secrets/ca; fi; \
-    cargo build --release --locked -p replayd && cp target/release/replayd /replayd
+    cargo build --release --locked -p replayd && cp target/release/replayd /replayd \
+ && mkdir -p /data-dir
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /replayd /replayd
+# A new named volume mounted on /data takes this ownership, so the nonroot user can write replays.
+COPY --from=build --chown=65532:65532 /data-dir /data
 USER nonroot
 EXPOSE 8080
 ENTRYPOINT ["/replayd"]

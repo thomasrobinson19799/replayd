@@ -27,6 +27,10 @@ struct Setup {
 }
 
 fn setup(queue: usize, cfg: IngestConfig) -> Setup {
+    setup_with_sdk(queue, cfg, std::env::temp_dir())
+}
+
+fn setup_with_sdk(queue: usize, cfg: IngestConfig, sdk_dir: std::path::PathBuf) -> Setup {
     let cache = Arc::new(ProjectCache::default());
     cache.replace(vec![
         row(
@@ -45,8 +49,7 @@ fn setup(queue: usize, cfg: IngestConfig) -> Setup {
         tx,
         None,
     ));
-    let app =
-        router(st, std::env::temp_dir()).layer(MockConnectInfo(SocketAddr::from(([203, 0, 113, 7], 5555))));
+    let app = router(st, sdk_dir).layer(MockConnectInfo(SocketAddr::from(([203, 0, 113, 7], 5555))));
     Setup { app, rx }
 }
 
@@ -224,6 +227,40 @@ async fn config_etag_and_cache() {
     assert_eq!(v["ttl"], 600);
     let r = s.app.oneshot(req(Some(&etag))).await.unwrap();
     assert_eq!(r.status(), StatusCode::NOT_MODIFIED);
+}
+
+#[tokio::test]
+async fn sdk_files_versioned_immutable_latest_revalidated() {
+    let dir = std::env::temp_dir().join(format!("rp-sdk-{}", std::process::id()));
+    for v in ["0.1.0", "latest"] {
+        std::fs::create_dir_all(dir.join(v)).unwrap();
+        std::fs::write(dir.join(v).join("replayd.min.js"), "/*sdk*/").unwrap();
+    }
+    let s = setup_with_sdk(8, IngestConfig::default(), dir.clone());
+    let get = |uri: &str| HttpRequest::get(uri).body(Body::empty()).unwrap();
+    let r = s
+        .app
+        .clone()
+        .oneshot(get("/ingest/sdk/0.1.0/replayd.min.js"))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::OK);
+    assert_eq!(
+        r.headers()[header::CACHE_CONTROL],
+        "public, max-age=31536000, immutable"
+    );
+    assert_eq!(r.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
+    let r = s
+        .app
+        .clone()
+        .oneshot(get("/ingest/sdk/latest/replayd.min.js"))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::OK);
+    assert_eq!(r.headers()[header::CACHE_CONTROL], "public, max-age=300");
+    let r = s.app.oneshot(get("/ingest/sdk/0.1.0/missing.js")).await.unwrap();
+    assert_eq!(r.status(), StatusCode::NOT_FOUND);
+    std::fs::remove_dir_all(dir).ok();
 }
 
 #[tokio::test]

@@ -3,8 +3,9 @@
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { main, parseArgs, tildePath, uploadSourcemaps } from '../src/index';
+import { isEntry, main, parseArgs, tildePath, uploadSourcemaps } from '../src/index';
 
 const map = (f: string) => JSON.stringify({ version: 3, file: f, sources: ['../src/a.ts'], names: [], mappings: 'AAAA' });
 async function build() {
@@ -20,6 +21,16 @@ async function build() {
 const ok = () => vi.fn(async (_u: string, _i?: RequestInit) => new Response('{"files":2}', { status: 200 }));
 
 describe('@replayd/cli', () => {
+  it('detects being the entry script on any OS (spaces, Windows drive paths)', async () => {
+    const d = await mkdtemp(join(tmpdir(), 'rp cli '));
+    const f = join(d, 'index.js');
+    await writeFile(f, '');
+    const self = pathToFileURL(f).href;
+    expect(isEntry(f, self)).toBe(true);
+    expect(isEntry(join(d, 'other.js'), self)).toBe(false);
+    expect(isEntry(undefined, self)).toBe(false);
+  });
+
   it('maps paths to the ~/path the server keys maps by', () => {
     expect(tildePath('~/_nuxt', 'chunks/x.js.map')).toBe('~/_nuxt/chunks/x.js');
     expect(tildePath('~/_nuxt/', 'a.js.map')).toBe('~/_nuxt/a.js');
