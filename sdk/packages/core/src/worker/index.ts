@@ -82,7 +82,8 @@ const add = (e: A) => {
 
 // ---- upload queue: one request in flight, exp. backoff 1 s → 60 s, max 5 attempts, Retry-After on 429/503
 const q: Q[] = [];
-let qb = 0, fl = 0, tm: ReturnType<typeof setTimeout> | 0 = 0;
+// sv: the pending timer is a server Retry-After (honoured even on online/resume), else a network backoff
+let qb = 0, fl = 0, tm: ReturnType<typeof setTimeout> | 0 = 0, sv = false;
 const rm = (it: Q) => {
   const i = q.indexOf(it);
   if (i >= 0) qb -= q.splice(i, 1)[0]!.b.length;
@@ -106,6 +107,7 @@ const go = (it: Q, ka: boolean) => {
       fl--;
       if (ra > -2 && ra && ++it.n < 5) {
         clearTimeout(tm);
+        sv = ra > 0;
         tm = setTimeout(
           () => {
             tm = 0;
@@ -131,7 +133,13 @@ const done = (it: Q) => {
   it.p?.then((k) => k != null && del('q', k)).catch(() => {});
 };
 /** loads stored segments that are not in memory (oldest first, ≤ the memory cap); expired/over-cap → gap */
-const drain = async () => {
+const drain = async (now?: 1) => {
+  // back online / resumed: a network backoff (up to 60 s) would hold the whole outbox, retry now
+  if (now && tm && !sv) {
+    clearTimeout(tm);
+    tm = 0;
+    pump();
+  }
   if (!ob || draining) return;
   draining = 1;
   try {
@@ -208,7 +216,7 @@ G.onmessage = (e: MessageEvent) => {
       cpc = m[4] || 1;
       ob = m[5] ? 1 : 0;
       void drain();
-    } else if (m[0] == 4) void drain();
+    } else if (m[0] == 4) void drain(1);
     if (raw >= FULL && !asked) {
       asked = 1;
       G.postMessage([0]);

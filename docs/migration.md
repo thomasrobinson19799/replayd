@@ -22,8 +22,9 @@ location /_rp/ {
     access_log off;
 }
 ```
-Add the site's nginx host to replayd `trusted_proxies` (`REPLAYD_TRUSTED_PROXIES`) so per-IP rate limits see the
-real client IP.
+Add each site's nginx IP (the address replayd's nginx sees the tunnel request from) to `REPLAYD_SITE_PROXIES`
+(comma-separated) in replayd's compose environment, so per-IP rate limits see the real client IP. replayd's own nginx is
+trusted already (fixed address `REPLAYD_NGINX_IP`, default 172.30.53.10).
 
 ## 3. Terminals (Nuxt 4)
 ```diff

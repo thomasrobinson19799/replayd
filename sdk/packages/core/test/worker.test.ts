@@ -229,6 +229,40 @@ describe('replay worker', () => {
       expect(meta).toMatchObject({ sid: 's1', seq: 0, gap: false });
     });
 
+    it('online / resume during a network backoff retries at once; a server Retry-After still holds', async () => {
+      // real-time waits only: the fake clock stands still, so a pending backoff timer can never fire by itself
+      const wait = async (ok: () => boolean) => {
+        const end = performance.now() + 2000;
+        while (!ok() && performance.now() < end) await new Promise((r) => setImmediate(r));
+      };
+      let up = false;
+      const { f, send } = await setup(() => (up ? Promise.resolve(res(202)) : Promise.reject(new TypeError('offline'))), 1);
+      send([1, [{ type: 3, timestamp: T, data: { source: 1, positions: [] } }]]);
+      send([3, meta0(0), RED, false]);
+      await wait(() => f.mock.calls.length === 1);
+      await sleep(50);
+      expect(f).toHaveBeenCalledTimes(1); // failed, now in a 1 s backoff
+      up = true;
+      send([4]);
+      await wait(() => f.mock.calls.length === 2);
+      expect(f).toHaveBeenCalledTimes(2);
+      await sleep(50);
+      expect(await stored()).toBe(0);
+
+      const st = [503, 202];
+      const g = await setup(() => Promise.resolve(res(st.shift()!, { 'retry-after': '30' })), 1);
+      g.send([1, [{ type: 3, timestamp: T, data: { source: 1, positions: [] } }]]);
+      g.send([3, meta0(0), RED, false]);
+      await wait(() => g.f.mock.calls.length === 1);
+      await sleep(50);
+      g.send([4]);
+      await sleep(100);
+      expect(g.f).toHaveBeenCalledTimes(1); // the server asked for 30 s
+      await vi.advanceTimersByTimeAsync(30_010);
+      await wait(() => g.f.mock.calls.length === 2);
+      expect(g.f).toHaveBeenCalledTimes(2);
+    });
+
     it('drains leftovers of a previous run at start; expired ones become a gap', async () => {
       const idb = await import('../src/idb');
       const { encodeSegment } = await import('../src/wire');
