@@ -15,6 +15,7 @@ and the admin panels. One project per app (PRD §1); web and APK builds of a ter
 # replaces: location /sentry { … }
 location /_rp/ {
     proxy_pass https://replay.example.com/ingest/;
+    proxy_ssl_server_name on;   # send SNI: CDNs (Cloudflare, ArvanCloud) refuse TLS without it
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_http_version 1.1;
     proxy_request_buffering off;
