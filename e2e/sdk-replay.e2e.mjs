@@ -78,7 +78,7 @@ try {
   const pw = await frame.locator('input[type=password]').getAttribute('value');
   const counts = await dp.evaluate(() => Object.fromEntries([...document.querySelectorAll('aside nav button')].map((b) => [b.textContent.trim().split(/\s+/)[0], Number(b.textContent.trim().split(/\s+/)[1] ?? 0)])));
   // play to the end at 8× and check the DOM change made after the click
-  await dp.selectOption('select', '8');
+  await dp.getByRole('combobox', { name: 'Playback speed' }).selectOption('8');
   await dp.waitForTimeout(3500);
   const placed = await frame.locator('#log p').count();
   const r = { first_frame_ms: await dp.evaluate(() => window.__rpFirstFrameMs), rows, password_masked: pw !== 'hunter2', tabs: counts, order_placed_rendered: placed };

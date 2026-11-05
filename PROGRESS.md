@@ -62,7 +62,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | ID | Task | Status | Notes / acceptance |
 |---|---|---|---|
 | UI-01 | PRD audit and missing dashboard APIs | done | docs/dashboard-audit.md; own password + revoke other sessions atomically; hourly statistics; environment filter; admin issue/ended-session deletion; project-admin member add by exact email. Rust fmt, Clippy -D warnings, full tests including PostgreSQL RBAC/account tests pass. |
-| UI-02 | Shared design system, shell, projects, users and account | wip | Responsive sidebar, themes, reusable controls, real activity, setup snippets, user management and password flow; dashboard lint/typecheck/build and 21 Vitest tests pass. Browser verification in progress. |
+| UI-02 | Shared design system, shell, projects, users and account | done | Responsive sidebar, themes, reusable controls, real activity, setup snippets, user management and password flow; dashboard lint/typecheck/build and 22 Vitest tests pass. Real browser project creation, user creation/disable/enable, password/session revocation and keyboard flows pass. |
 | UI-03 | Triage, replay and settings completion | wip | URL restoration, bounded session paging, role-aware bulk controls, custom ignore, replay search/follow/network inspector/fullscreen, dirty guard and feedback. Browser verification in progress. |
 | UI-04 | Visual, end-to-end and performance acceptance | wip | Local images rebuilt; all non-WordPress suites queued. T-41/T-51/T-52 stay blocked. No push or production deployment. |
 

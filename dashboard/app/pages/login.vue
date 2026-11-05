@@ -1,38 +1,41 @@
 <script setup lang="ts">
-const session = useSessionStore()
-const route = useRoute()
-const email = ref('')
-const password = ref('')
-const error = ref('')
-const busy = ref(false)
+import { safeReturnPath } from "~/utils/account";
+const session = useSessionStore();
+const route = useRoute();
+const email = ref("");
+const password = ref("");
+const error = ref("");
+const busy = ref(false);
 
 async function submit() {
-  error.value = ''
-  busy.value = true
+  error.value = "";
+  busy.value = true;
   try {
-    await session.login(email.value, password.value)
-    const next = typeof route.query.next === 'string' && route.query.next.startsWith('/') ? route.query.next : '/'
-    await navigateTo(next)
-  }
-  catch (e) {
-    const status = (e as { status?: number }).status
-    error.value = status === 429 ? 'Too many attempts, try again in a minute.' : 'Invalid email or password.'
-  }
-  finally {
-    busy.value = false
+    await session.login(email.value, password.value);
+    const next = safeReturnPath(route.query.next);
+    await navigateTo(next);
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    error.value =
+      status === 429
+        ? "Too many attempts, try again in a minute."
+        : "Invalid email or password.";
+  } finally {
+    busy.value = false;
   }
 }
 </script>
 
 <template>
-  <div class="mx-auto mt-24 max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-    <h1 class="mb-6 text-xl font-semibold">
-      Sign in to replayd
-    </h1>
-    <form
-      class="space-y-4"
-      @submit.prevent="submit"
-    >
+  <div class="login-panel card">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">▸▸</span>replayd
+    </div>
+    <h1 class="mb-6 text-xl font-semibold">Sign in to replayd</h1>
+    <p class="muted">
+      Find the error. Replay the moment. Get back to building.
+    </p>
+    <form class="space-y-4" @submit.prevent="submit">
       <label class="block text-sm">
         <span class="text-gray-600">Email</span>
         <input
@@ -55,11 +58,7 @@ async function submit() {
           class="mt-1 w-full rounded border border-gray-300 px-3 py-2"
         >
       </label>
-      <p
-        v-if="error"
-        class="text-sm text-red-600"
-        role="alert"
-      >
+      <p v-if="error" class="text-sm text-red-600" role="alert">
         {{ error }}
       </p>
       <button
@@ -67,7 +66,7 @@ async function submit() {
         :disabled="busy"
         class="w-full rounded bg-gray-900 px-3 py-2 text-white hover:bg-gray-700 disabled:opacity-50"
       >
-        {{ busy ? 'Signing in…' : 'Sign in' }}
+        {{ busy ? "Signing in…" : "Sign in" }}
       </button>
     </form>
   </div>
