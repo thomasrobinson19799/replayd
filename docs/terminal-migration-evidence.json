@@ -1,0 +1,93 @@
+{
+  "repository": "D:/Projects/forex-trading-platform/terminal",
+  "commit": "ef67dffcc10d4f554656af4503b28994fe08cfce",
+  "sdkInstalled": true,
+  "sentryDependencyRemoved": true,
+  "ciSourceMapUpload": true,
+  "variants": [
+    {
+      "brand": "fx",
+      "platform": "desktop",
+      "file": ".files/fx/nuxt.config.desktop.ts",
+      "module": true,
+      "configured": true,
+      "sourceMaps": true,
+      "sentryRemoved": true
+    },
+    {
+      "brand": "fx",
+      "platform": "mobile",
+      "file": ".files/fx/nuxt.config.mobile.ts",
+      "module": true,
+      "configured": true,
+      "sourceMaps": true,
+      "sentryRemoved": true
+    },
+    {
+      "brand": "fx",
+      "platform": "apk",
+      "file": ".files/fx/nuxt.config.apk.ts",
+      "module": true,
+      "configured": true,
+      "sourceMaps": true,
+      "sentryRemoved": true
+    },
+    {
+      "brand": "up",
+      "platform": "desktop",
+      "file": ".files/up/nuxt.config.desktop.ts",
+      "module": true,
+      "configured": true,
+      "sourceMaps": true,
+      "sentryRemoved": true
+    },
+    {
+      "brand": "up",
+      "platform": "mobile",
+      "file": ".files/up/nuxt.config.mobile.ts",
+      "module": true,
+      "configured": true,
+      "sourceMaps": true,
+      "sentryRemoved": true
+    },
+    {
+      "brand": "up",
+      "platform": "apk",
+      "file": ".files/up/nuxt.config.apk.ts",
+      "module": true,
+      "configured": true,
+      "sourceMaps": true,
+      "sentryRemoved": true
+    },
+    {
+      "brand": "cap",
+      "platform": "desktop",
+      "file": ".files/cap/nuxt.config.desktop.ts",
+      "module": true,
+      "configured": true,
+      "sourceMaps": true,
+      "sentryRemoved": true
+    },
+    {
+      "brand": "cap",
+      "platform": "mobile",
+      "file": ".files/cap/nuxt.config.mobile.ts",
+      "module": true,
+      "configured": true,
+      "sourceMaps": true,
+      "sentryRemoved": true
+    },
+    {
+      "brand": "cap",
+      "platform": "apk",
+      "file": ".files/cap/nuxt.config.apk.ts",
+      "module": true,
+      "configured": true,
+      "sourceMaps": true,
+      "sentryRemoved": true
+    }
+  ],
+  "remainingSentryCode": [],
+  "limitation": "Static source verification only. Does not assert deployment, live ingest, Android hardware performance or website migration.",
+  "passed": true
+}

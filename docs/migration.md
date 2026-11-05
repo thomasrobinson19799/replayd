@@ -3,6 +3,14 @@
 Applies to the three terminals (fxglory, unitedpips, capitalcore: Nuxt 4, web + Capacitor APK), the WordPress sites
 and the admin panels. One project per app (PRD §1); web and APK builds of a terminal share a project.
 
+## Verified source status — 2026-11-06
+
+The shared terminal repository is available at `D:/Projects/forex-trading-platform/terminal` and was already migrated by commits `88cf0166`, `75ca1d5b`, `edc8ccd4`, `d3f28781` and `ef67dffc`. Its checkout is clean. No duplicate migration or source edits were needed.
+
+`node scripts/check-terminal-migration.mjs <terminal-root> docs/terminal-migration-evidence.json` performs a read-only audit without printing credentials. The audit passed for FXGlory (`fx`), UnitedPips (`up`) and CapitalCore (`cap`), each with desktop/mobile/APK configs: replayd dependencies/module/config present, source-map settings present, Sentry dependency/imports/calls/tunnel directives removed from the audited source, and replayd source-map upload present in CI. The checked commit and per-config evidence are in [terminal-migration-evidence.json](terminal-migration-evidence.json).
+
+This closes the unavailable-terminal-source blocker. It does not assert that the website repositories were migrated, that any deployment ran, or that the APK passed on hardware. Staging WordPress access, website cut-over and the real-device checklist remain external acceptance gates. Existing production systems were not changed.
+
 ## 1. replayd side (once per app)
 1. Dashboard → Projects → New: slug (e.g. `fxglory-terminal`), allowed origins: the web origin(s) **and**
    `https://localhost` (APK). Copy the DSN and the one-time **upload token** (CI secret `REPLAYD_UPLOAD_TOKEN`).
