@@ -7,6 +7,7 @@
 //   long tasks     > 50 ms after the first 5 s · uplink KB/s · main heap Δ vs baseline
 // Usage: node bench/perf/compare.mjs   env RATES=4,1 SECONDS=20 REPEAT=2 SCENARIO=hist=60&throttle=1000
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { gzipSync } from 'node:zlib';
 import { build } from 'esbuild';
@@ -17,10 +18,10 @@ const RATES = (process.env.RATES ?? '4,1').split(',').map(Number);
 const SECONDS = Number(process.env.SECONDS ?? 20);
 const REPEAT = Number(process.env.REPEAT ?? 2);
 const SCENARIO = process.env.SCENARIO ?? 'hist=60&throttle=1000';
-const sdkRoot = new URL('../../', import.meta.url).pathname;
+const sdkRoot = fileURLToPath(new URL('../../', import.meta.url));
 const dist = `${sdkRoot}packages/core/dist/`;
 if (!process.env.NO_BUILD) execSync('pnpm --filter @replayd/core run build', { cwd: sdkRoot, stdio: 'inherit' });
-const sentryJs = (await build({ entryPoints: [new URL('../lib/sentry-entry.js', import.meta.url).pathname], bundle: true, minify: true, format: 'iife', target: 'es2022', write: false })).outputFiles[0].contents;
+const sentryJs = (await build({ entryPoints: [fileURLToPath(new URL('../lib/sentry-entry.js', import.meta.url))], bundle: true, minify: true, format: 'iife', target: 'es2022', write: false })).outputFiles[0].contents;
 const gz = (b) => gzipSync(b, { level: 9 }).length;
 const bundles = {
   replayd: { sync: gz(await readFile(`${dist}replayd.min.js`)), lazy: gz(await readFile(`${dist}replay.js`)) + gz(await readFile(`${dist}worker.js`)) },
@@ -47,7 +48,7 @@ const { server, port } = await startServer(0, undefined, {
     return true;
   },
 });
-const browser = await chromium.launch();
+const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined });
 const q = (a, p) => a[Math.min(a.length - 1, Math.floor(p * a.length))];
 const med = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
 const sdkUrl = { replayd: /\/sdk\/(replayd\.min|replay|index)\.js$/, sentry: /\/sentry\.js$/ };

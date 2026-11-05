@@ -311,3 +311,26 @@ The final 60-minute fixture has 709 frames, 26,178 events and 4,839,438 compress
 Issue/session lists render one page of 50 rows; users are paged at 50; inspector lists stay virtualized.
 Timeline markers are grouped into at most 1,200 bins. Body formatting happens only for the selected request.
 The replay decoder and ingest paths retain their existing processing boundaries.
+
+### Windows SDK requalification — 2026-11-06
+
+The benchmark runners now use filesystem-safe URL conversion and support `PLAYWRIGHT_CHANNEL=chrome`.
+`scripts/bench-local.ps1` runs the existing terminal-1000 scenario with 15 s steady state, three repetitions,
+rates 1×/4×, and the tracing categories needed to measure the initial task. No runtime capture code changed.
+SDK lint, all 139 tests and all size limits pass (core 6.90 KB; IIFE 6.96 KB; replay 25.57 KB; worker 2.76 KB).
+
+| Metric (median of 3) | 1× | 4× | Interpretation |
+|---|---:|---:|---|
+| Initial replay task | 23.00 ms | 171.21 ms | Desktop <50 ms passes; 4× <150 ms is still not reliably met |
+| Replay batch p95 | 0.79 ms | 3.26 ms | Existing D-20 exception applies; no budget was raised |
+| Batch p95 including core | 1.71 ms | 8.86 ms | Reported separately, not hidden in the replay-only figure |
+| Replay main-thread work | 0.99 ms/s | 4.11 ms/s | Informational |
+| Upload | 2.73 KB/s | 1.57 KB/s | Both <5 KB/s |
+| Heap above baseline | 1.31 MB | 1.30 MB | Informational |
+| Observed long tasks after initial-task filter | 0 | 1 (172 ms) | Investigate with actual device evidence; do not mark the gate passed |
+
+All uploaded-segment, redaction and throttling checks passed. A subsequent single diagnostic 4× run measured
+147.39 ms initial task, batch p95 3.37 ms and no subsequent long tasks; this demonstrates variability, not a
+replacement for the three-run result. The hard snapshot budget remains open. Android platform tools are
+installed on this machine, but `adb devices -l` found no connected device on 2026-11-06. T-51 hardware,
+30-minute heap/thermal and APK lifecycle acceptance cannot be certified from desktop emulation.

@@ -14,6 +14,7 @@
 //
 // Usage: node bench/perf/replay.mjs   env: RATES=4,1 SECONDS=15 REPEAT=3 SCENARIOS=terminal-1000,… NO_BUILD=1
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { chromium } from 'playwright';
@@ -30,8 +31,8 @@ const ALL = {
   'no-throttle': 'hist=60', // no data-rp-throttle attribute at all
 };
 const SCEN = (process.env.SCENARIOS ?? Object.keys(ALL).join(',')).split(',');
-const sdkRoot = new URL('../../', import.meta.url).pathname;
-const dist = new URL('../../packages/core/dist/', import.meta.url).pathname;
+const sdkRoot = fileURLToPath(new URL('../../', import.meta.url));
+const dist = fileURLToPath(new URL('../../packages/core/dist/', import.meta.url));
 if (!process.env.NO_BUILD) execSync('pnpm --filter @replayd/core run build', { cwd: sdkRoot, stdio: 'inherit' });
 
 const isolate = { 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp', 'cross-origin-resource-policy': 'same-origin' };
@@ -58,7 +59,7 @@ const { server, port } = await startServer(0, undefined, {
     return true;
   },
 });
-const browser = await chromium.launch();
+const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined });
 // the SDK goes first in <head> like in production (IIFE build, which lazy-loads replay.js + worker.js next to
 // it), so the app's WebSocket is created through the patched constructor
 const inject = (sdk) => `<script>window.__lt=[];new PerformanceObserver((l)=>{for(const e of l.getEntries())window.__lt.push([e.startTime,e.duration])}).observe({type:'longtask',buffered:true});</script>${sdk ? `<script src="/sdk/replayd.min.js"></script><script>Replayd.init({ dsn: 'http://pk@' + location.host + '/7', tunnel: '/_rp', release: 'bench', environment: 'bench', ${process.env.OPTS ?? ''} });</script>` : ''}`;
