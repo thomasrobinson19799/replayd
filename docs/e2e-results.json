@@ -1,0 +1,57 @@
+[
+  {
+    "suite": "issues",
+    "exit": 0,
+    "seconds": 6
+  },
+  {
+    "suite": "sdk-replay",
+    "exit": 0,
+    "seconds": 21
+  },
+  {
+    "suite": "issue-status",
+    "exit": 0,
+    "seconds": 7
+  },
+  {
+    "suite": "capacitor",
+    "exit": 0,
+    "seconds": 33
+  },
+  {
+    "suite": "sourcemaps",
+    "exit": 0,
+    "seconds": 4
+  },
+  {
+    "suite": "remote-config",
+    "exit": 0,
+    "seconds": 5
+  },
+  {
+    "suite": "adapters",
+    "exit": 0,
+    "seconds": 37
+  },
+  {
+    "suite": "player",
+    "exit": 0,
+    "seconds": 46
+  },
+  {
+    "suite": "alerts",
+    "exit": 0,
+    "seconds": 17
+  },
+  {
+    "suite": "observability",
+    "exit": 0,
+    "seconds": 26
+  },
+  {
+    "suite": "dashboard",
+    "exit": 0,
+    "seconds": 10
+  }
+]

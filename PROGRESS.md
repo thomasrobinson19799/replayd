@@ -64,7 +64,7 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | UI-01 | PRD audit and missing dashboard APIs | done | docs/dashboard-audit.md; own password + revoke other sessions atomically; hourly statistics; environment filter; admin issue/ended-session deletion; project-admin member add by exact email. Rust fmt, Clippy -D warnings, full tests including PostgreSQL RBAC/account tests pass. |
 | UI-02 | Shared design system, shell, projects, users and account | done | Responsive sidebar, themes, reusable controls, real activity, setup snippets, user management and password flow; dashboard lint/typecheck/build and 22 Vitest tests pass. Real browser project creation, user creation/disable/enable, password/session revocation and keyboard flows pass. |
 | UI-03 | Triage, replay and settings completion | done | URL restoration, bounded session paging, role-aware bulk controls, custom ignore, replay search/follow/network inspector/fullscreen, dirty guard and feedback. All dashboard checks pass; browser checks cover timeline, fullscreen, Device search and all settings tabs. Direct-page nginx routing fixed (D-32). |
-| UI-04 | Visual, end-to-end and performance acceptance | wip | Local images rebuilt; all non-WordPress suites queued. T-41/T-51/T-52 stay blocked. No push or production deployment. |
+| UI-04 | Visual, end-to-end and performance acceptance | done | Final local images/stack verified; all 11 non-WordPress e2e suites pass, plus populated-screen pointer/keyboard checks. 39 screenshots at 1440/1024/525px; 22 dashboard tests; server fmt/Clippy/tests pass. Bundle gzip 177,769 → 203,371 B; issue visibility 3,936ms; 60-min first frame 607–688ms; session-query worst p95 10ms. T-41/T-51/T-52 stay blocked. No push or production deployment. |
 
 ## Continue in a new session (paste this prompt)
 ```
@@ -88,6 +88,7 @@ Before stopping for any reason: commit, push, and update this section if the wor
 ```
 
 ## Session log
+- 2026-11-05: Completed owner's dashboard/API audit and overhaul on `ui-overhaul`, with logical local commits only. UI-01…UI-04 done; acceptance, page screenshots and remaining limits in `docs/dashboard-audit.md`, measurements in `docs/bench.md`, design contract in `DESIGN.md`. Final `node e2e/run-local.mjs`: 11/11 passed (WordPress excluded); local images rebuilt and stack left running on :8088. The owner's current instruction overrides the historical continuation prompt above: **do not push or deploy**. T-41/T-51/T-52 are still blocked.
 - 2026-11-04: Local verification on Windows 11 + Docker Desktop (WordPress, APK device and app-repo tasks skipped by owner). All checks + e2e (issues, sdk-replay, issue-status, capacitor, sourcemaps, remote-config, adapters, player, alerts, observability) green after fixes recorded in D-30. Locally the site-tunnel hop is Docker Desktop's gateway: start the stack with `REPLAYD_SITE_PROXIES=172.30.53.1` (alerts e2e also needs `REPLAYD_TELEGRAM_API=http://host.docker.internal:18099`). Windows notes: Playwright's browser CDN was unreachable, so e2e ran against installed Chrome via a `NODE_OPTIONS=--import=<preload>` that sets `channel: 'chrome'`; no `make` → run the Makefile steps directly.
 - 2026-11-03: M5: T-40, T-50 done; T-41 (staging access), T-51 (device), T-52 (app repos) blocked on external access.
 - 2026-11-03: M4 complete (T-31…T-35).

@@ -276,3 +276,38 @@ that is within budget but close to it, so re-check on the 4 vCPU Hetzner box.
 | Server ingest p99 < 5 ms, ≥ 2k req/s, RSS | ✔ |
 | Session list < 100 ms p95, player first frame < 1 s | ✔ (T-22, T-23) |
 | Real-device APK checklist | ⏳ docs/apk-checklist.md, needs the device |
+
+### Dashboard completion and UI overhaul — 2026-11-05
+
+Windows 11, installed Chrome via Playwright, Docker Desktop local stack. Budgets are unchanged.
+
+Bundle measurement: production `pnpm build`, then `node scripts/dashboard-size.mjs`.
+Counts every emitted `_nuxt/*.js` and `*.css`, including lazy replay/rrweb and decode worker files;
+each file is independently gzipped with Node's default gzip settings. This is aggregate emitted code,
+not the initial route transfer. The baseline was measured before dashboard edits on the same machine.
+
+| Build | Files | Raw bytes | Gzip bytes |
+|---|---:|---:|---:|
+| Before | 23 | 514,089 | 177,769 |
+| After | 40 | 575,220 | 203,371 |
+| Change | +17 | +61,131 | +25,602 (+14.4%) |
+
+The increase adds account/user workflows, shared controls, settings/replay inspection and both themes.
+No dashboard runtime dependency or SDK dependency was added; test tooling is development-only.
+
+| Acceptance measurement | Result | Budget |
+|---|---|---|
+| Error visible in dashboard, final full-suite run | 3,936 ms | < 5,000 ms |
+| 60-minute replay, 20 Mbit/s, 3 cold browser contexts | 607 / 688 / 620 ms; median 620 ms | first frame < 1,000 ms |
+| Replay progressive playback and seek to minute 45 | 3/3 passed while download still active | preserve progressive playback |
+| Session list, 140k local seed, 11 filter combinations | worst p95 10.0 ms; other combinations 6.5–9.1 ms | p95 < 100 ms |
+
+Session-query p95 by case (milliseconds): default 10.0; error 8.6; APK 9.0; user 7.5;
+URL no-match 8.3; combined 6.5; deposit URL 8.8; browser+release 9.1; duration 8.0;
+APK+WS 8.5; last 24h 7.5. Measured with `e2e/bench-sessions.mjs` after the existing
+`scripts/seed-sessions.sql` local fixture. Business fixtures are stored only in the local test database.
+
+The final 60-minute fixture has 709 frames, 26,178 events and 4,839,438 compressed bytes.
+Issue/session lists render one page of 50 rows; users are paged at 50; inspector lists stay virtualized.
+Timeline markers are grouped into at most 1,200 bins. Body formatting happens only for the selected request.
+The replay decoder and ingest paths retain their existing processing boundaries.

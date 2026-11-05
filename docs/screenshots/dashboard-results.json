@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "widths": [
+    1440,
+    1024,
+    525
+  ],
+  "routes": [
+    "projects",
+    "issues",
+    "sessions",
+    "settings",
+    "users",
+    "account"
+  ],
+  "browserErrors": []
+}

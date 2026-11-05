@@ -19,4 +19,47 @@ Scope: PRD §5.10–5.11, §6–6.2 and the owner's dashboard overhaul request. 
 
 Not in scope: canvas (D-01), SSO, backend tracing, iOS, GeoIP and external broker access. Invitation means creating an account and securely sharing its initial password; no email delivery provider exists. T-41, T-51 and T-52 remain blocked on external resources. Local stack rebuilds are verification only, never production deployment. No push.
 
-Validation results and acceptance are recorded below as work completes.
+## Acceptance
+
+- [x] Users: create an account with an initial password, edit name/global role, reset password, disable/enable and delete with confirmation. Project roles remain separate from the global superadmin flag.
+- [x] Account: current-password validation, minimum/maximum length, mismatch feedback, current session retained and other sessions revoked. Logout errors leave the account recoverable.
+- [x] API: hourly statistics, issue environment filtering, admin issue/ended-session deletion, and project-admin membership by exact email. PostgreSQL integration tests cover RBAC, CSRF and session invalidation.
+- [x] Shell and shared controls: OS/light/dark theme, project switcher, breadcrumbs, account menu, responsive navigation, keyboard focus, `/`, `j/k` and `?`; semantic tables, dialogs and tabs.
+- [x] Projects: actual 24h activity and sparklines; project creation ends with real DSN/token, copy controls and Nuxt/script/CI examples. CI variables are exported and releases match `APP_VERSION`.
+- [x] Issues: URL-synced filters, history restoration, ordering, paging, role-aware bulk controls, activity, loading/empty states; detail retains stack context, event navigation and replay deep links.
+- [x] Sessions/replay: at most 50 session rows per keyset page; virtualized inspector lists; bounded timeline marker bins; failed-network filter, JSON body details, Device search, follow toggle, keyboard seek and fullscreen. Decoding still happens in the worker.
+- [x] Settings: six tabs, mobile-visible selected tab, shared feedback, dirty navigation/unload guard, validation, readable fingerprint inputs and explicit Telegram test feedback.
+- [x] No SDK runtime dependencies, redaction defaults or ingest decoding changes. Viewer payload filtering and existing capture checks remain passing.
+- [x] No push or production deployment. Local images rebuilt and local stack healthy. T-41/T-51/T-52 remain blocked.
+
+## Page review and screenshots
+
+Screenshots use local database fixtures through the real API. Desktop, intermediate and narrow widths are 1440, 1024 and 525 pixels. The extra settings screenshots inspect all six tabs at 525 pixels. These are evidence snapshots, not hardcoded frontend content.
+
+| Page | Result | Screenshot |
+|---|---|---|
+| Projects | Real activity cards, search and clear creation/setup flow | [Desktop](screenshots/projects-1440.png), [narrow](screenshots/projects-525.png) |
+| Issues | Scannable table, filters, activity and explicit empty/loading states | [Populated](screenshots/issues-populated-1440.png), [empty](screenshots/issues-525.png) |
+| Issue detail | Status/count hierarchy, stack context, tag chips, spaced breadcrumb timeline and replay action | [Desktop](screenshots/issue-detail-1440.png), [narrow](screenshots/issue-detail-525.png) |
+| Sessions | Bounded, filterable table with duration/platform/error context | [Desktop](screenshots/sessions-populated-1440.png), [narrow](screenshots/sessions-populated-525.png) |
+| Replay | Recorded-aspect stage, timeline, compact controls and searchable inspector | [Desktop](screenshots/replay-1440.png), [narrow](screenshots/replay-525.png), [network details](screenshots/network-detail.png) |
+| Settings | Six consistent forms; tabs wrap; rules stack on narrow screens | [Remote config](screenshots/settings-525.png), [Telegram](screenshots/settings-telegram-525.png), [rules](screenshots/settings-rules-525.png) |
+| Users | Search, bounded table, explicit roles and confirmed mutations | [Desktop](screenshots/users-1440.png), [narrow](screenshots/users-525.png) |
+| Account | Identity, password validation and session-revocation explanation | [Light](screenshots/account-1440.png), [dark](screenshots/account-dark.png) |
+| Login | Focused form, generic authentication failures, loading state | [Narrow](screenshots/login-525.png) |
+
+## Validation and reproduction
+
+- Dashboard: `pnpm lint`, `pnpm typecheck`, `pnpm test` (22 tests in 5 files), `pnpm build` pass. Added dependencies are development-only test tooling; no UI framework or runtime package was added.
+- Server: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` pass, including real PostgreSQL integration tests. `scripts/check-server.ps1` enables those tests against the local database. The pre-existing ignored performance test remains ignored.
+- Local acceptance: `node e2e/run-local.mjs` runs issues, SDK replay, issue status, Capacitor, source maps, remote config, framework adapters, 60-minute player, Telegram alerts, observability and dashboard flows. [Machine-readable results](e2e-results.json).
+- The dashboard browser test exercises actual pointer clicks for creation/disable/enable, password/session revocation, URL back navigation, shortcuts, dialogs, dirty settings, fingerprint validation and themes. No browser errors or document overflow were found at the three widths.
+- `node --import ./e2e/chrome-preload.mjs e2e/visual-dashboard.mjs` checks populated screens, real pointer timeline clicks, keyboard seeking, network detail, Device search and fullscreen. The preload selects installed Chrome for this Windows machine; the original suites remain usable with normal Playwright browsers.
+- Local stack: `scripts/local-stack.ps1` sets the Docker Desktop site-proxy address and mock Telegram endpoint. It starts already-built images without touching production. nginx direct-page routing is fixed under decision D-32.
+- [Bundle and performance measurements](bench.md) retain the original budgets.
+
+## Remaining limits
+
+No email invitation provider is configured; administrators securely share the initial password. Active session deletion is intentionally rejected while a writer is running. Canvas remains out of v1. WordPress staging, real-device Android measurements and other application repositories remain blocked under T-41/T-51/T-52; local browser tests do not replace those checks. The dashboard remains the PRD-required authenticated Nuxt SPA.
+
+Nuxt's Windows build emits an existing cache-driver resolution warning but completes successfully; the Docker build and runtime checks pass. An early combined Telegram regression check failed under overlapping work; isolated and subsequent sequential full-suite runs passed all eight Telegram assertions without weakening the test or changing the server.
