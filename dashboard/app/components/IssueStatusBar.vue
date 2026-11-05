@@ -10,6 +10,14 @@ const api = useApi()
 const busy = ref(false)
 const err = ref('')
 const open = ref(false)
+const ignoreRoot = ref<HTMLElement | null>(null)
+const ignoreTrigger = ref<HTMLButtonElement | null>(null)
+function closeIgnore() { open.value = false; ignoreTrigger.value?.focus() }
+function outside(e: PointerEvent) {
+  if (ignoreRoot.value && !ignoreRoot.value.contains(e.target as Node)) open.value = false
+}
+onMounted(() => document.addEventListener('pointerdown', outside))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 const customOpen = ref(false)
 const customKind = ref('date')
 const customDate = ref('')
@@ -72,20 +80,24 @@ const text = computed(() => statusText(props.issue, dateTime))
         >
           {{ resolveNextAction.label }}
         </button>
-        <div class="relative">
+        <div ref="ignoreRoot" class="relative ignore-control" :class="{ 'ignore-control--open': open }" @keydown.esc.stop="closeIgnore">
           <button
+            ref="ignoreTrigger"
             class="rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50 disabled:opacity-50"
             :disabled="busy"
             data-testid="action-ignore"
             :aria-expanded="open"
-            @keydown.esc="open = false"
+            :aria-controls="`ignore-actions-${issue.id}`"
             @click="open = !open"
           >
             Ignore ▾
           </button>
           <div
             v-if="open"
-            class="absolute z-10 mt-1 w-60 rounded border border-gray-200 bg-white py-1 shadow"
+            :id="`ignore-actions-${issue.id}`"
+            class="ignore-menu absolute z-10 mt-1 w-60 rounded border border-gray-200 bg-white py-1 shadow"
+            role="group"
+            aria-label="Ignore options"
           >
             <button
               v-for="a in ignoreActions()"

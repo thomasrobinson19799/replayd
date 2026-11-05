@@ -30,32 +30,9 @@ const pageName = computed(() =>
                 : "Projects",
 );
 useHead({ title: computed(() => `${pageName.value} · replayd`) });
-const theme = ref("system");
-let media: MediaQueryList | undefined;
+const { theme, cycleTheme } = useColorTheme();
 let timer: ReturnType<typeof setInterval> | undefined;
 const now = useState("relative-now", () => Date.now());
-function applyTheme() {
-  document.documentElement.dataset.theme =
-    theme.value === "system"
-      ? media?.matches
-        ? "dark"
-        : "light"
-      : theme.value;
-}
-function cycleTheme() {
-  theme.value =
-    theme.value === "system"
-      ? "light"
-      : theme.value === "light"
-        ? "dark"
-        : "system";
-  try {
-    localStorage.setItem("replayd-theme", theme.value);
-  } catch {
-    /* Storage may be disabled. */
-  }
-  applyTheme();
-}
 async function signOut() {
   try {
     await session.logout();
@@ -89,21 +66,12 @@ function shortcuts(e: KeyboardEvent) {
   }
 }
 onMounted(() => {
-  media = matchMedia("(prefers-color-scheme: dark)");
-  try {
-    theme.value = localStorage.getItem("replayd-theme") || "system";
-  } catch {
-    /* OS default. */
-  }
-  applyTheme();
-  media.addEventListener("change", applyTheme);
   window.addEventListener("keydown", shortcuts);
   timer = setInterval(() => {
     now.value = Date.now();
   }, 30000);
 });
 onBeforeUnmount(() => {
-  media?.removeEventListener("change", applyTheme);
   window.removeEventListener("keydown", shortcuts);
   clearInterval(timer);
 });
@@ -149,9 +117,9 @@ watch(
         <nav aria-label="Main">
           <NuxtLink to="/"><UiIcon name="projects" />Projects</NuxtLink
           ><template v-if="project"
-            ><NuxtLink :to="`/projects/${project.slug}/issues`"
+            ><NuxtLink :to="`/projects/${project.slug}/issues`" :class="{ current: route.path.includes('/issues') }"
               ><UiIcon name="issues" />Issues</NuxtLink
-            ><NuxtLink :to="`/projects/${project.slug}/sessions`"
+            ><NuxtLink :to="`/projects/${project.slug}/sessions`" :class="{ current: route.path.includes('/sessions') || route.path.startsWith('/replay/') }"
               ><UiIcon name="sessions" />Sessions</NuxtLink
             ><NuxtLink
               v-if="project.role === 'admin'"

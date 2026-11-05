@@ -13,6 +13,12 @@ const index = ref(0);
 const error = ref("");
 const deleting = ref(false);
 const deleteOpen = ref(false);
+const olderBusy = ref(false);
+const eventError = ref("");
+const breadcrumbSearch = ref("");
+const shareUrl = computed(() => typeof window === "undefined" ? route.fullPath : `${window.location.origin}${route.fullPath}`);
+const breadcrumbs = computed(() => [...(event.value?.payload.breadcrumbs ?? [])].reverse().filter(b => `${b.cat} ${b.msg}`.toLowerCase().includes(breadcrumbSearch.value.toLowerCase())));
+let request = 0;
 async function remove() {
   deleting.value = true;
   try {
@@ -31,7 +37,11 @@ const event = computed<IssueEvent | null>(
 );
 
 async function load() {
+  const ticket = ++request;
   error.value = "";
+  eventError.value = "";
+  olderBusy.value = false;
+  breadcrumbSearch.value = "";
   issue.value = null;
   try {
     const [i, ev] = await Promise.all([
@@ -40,28 +50,37 @@ async function load() {
         `/issues/${id.value}/events`,
       ),
     ]);
+    if (ticket !== request) return;
     issue.value = i;
     events.value = ev.events;
     nextCursor.value = ev.next_cursor;
     index.value = 0;
   } catch (e) {
-    error.value = errorMessage(e);
+    if (ticket === request) error.value = errorMessage(e);
   }
 }
 
 async function older() {
+  if (olderBusy.value) return;
   if (index.value + 1 < events.value.length) {
     index.value++;
     return;
   }
   if (!nextCursor.value) return;
-  const ev = await api.get<{
-    events: IssueEvent[];
-    next_cursor: string | null;
-  }>(`/issues/${id.value}/events`, { query: { cursor: nextCursor.value } });
-  events.value.push(...ev.events);
-  nextCursor.value = ev.next_cursor;
-  if (index.value + 1 < events.value.length) index.value++;
+  const ticket = request;
+  olderBusy.value = true;
+  eventError.value = "";
+  try {
+    const ev = await api.get<{ events: IssueEvent[]; next_cursor: string | null }>(`/issues/${id.value}/events`, { query: { cursor: nextCursor.value } });
+    if (ticket !== request) return;
+    events.value.push(...ev.events);
+    nextCursor.value = ev.next_cursor;
+    if (index.value + 1 < events.value.length) index.value++;
+  } catch (e) {
+    if (ticket === request) eventError.value = errorMessage(e);
+  } finally {
+    if (ticket === request) olderBusy.value = false;
+  }
 }
 
 const tags = computed(() => {
@@ -111,184 +130,81 @@ watch(id, load);
 </script>
 
 <template>
-  <div>
-    <NuxtLink
-      :to="`/projects/${pid}/issues`"
-      class="text-sm text-gray-500 hover:underline"
-    >
-      ← Issues
-    </NuxtLink>
-    <p v-if="error" class="mt-4 text-sm text-red-600">
-      {{ error }}
-    </p>
+  <div class="issue-detail">
+  <!-- THESIS: an evidence-first triage workspace, following the owner's Sentry reference.
+       OWN-WORLD: plum navigation, violet actions, restrained neutral surfaces, compact controls.
+       STORY: identify impact, resolve or ignore, inspect an event, jump into its recording.
+       FIRST VIEWPORT: issue and impact above actions; stack left, issue context right.
+       FORM: owner-selected developer-tool convention; preserve real data and access controls. -->
+    <NuxtLink :to="`/projects/${pid}/issues`" class="issue-back">← All issues</NuxtLink>
+    <p v-if="error" class="field-error mt-4" role="alert">{{ error }}</p>
+    <UiButton v-if="error && !issue" class="mt-3" @click="load">Try again</UiButton>
     <UiSkeleton v-if="!issue && !error" :rows="5" />
     <template v-if="issue">
-      <UiButton
-        v-if="issue.can_delete"
-        class="float-right"
-        variant="danger"
-        @click="deleteOpen = true"
-        >Delete issue</UiButton
-      >
-      <div class="mt-2 flex flex-wrap items-start gap-4">
-        <div class="min-w-0 flex-1">
-          <h1
-            class="text-xl font-semibold break-words"
-            data-testid="issue-title"
-          >
-            <span
-              class="mr-2 inline-block h-2.5 w-2.5 rounded-full align-middle"
-              :class="issue.level === 'error' ? 'bg-red-500' : 'bg-amber-400'"
-            />{{ issue.title }}
-          </h1>
-          <p class="mt-1 text-sm text-gray-600">
-            {{ issue.culprit }} · {{ issue.source }}
-          </p>
-          <IssueStatusBar
-            class="mt-2"
-            :issue="issue"
-            :can-change="issue.can_change_status"
-            @updated="(u) => issue && Object.assign(issue, u)"
-          />
+      <header class="issue-header">
+        <div class="min-w-0">
+          <div class="issue-label"><UiBadge :tone="issue.level">{{ issue.level }}</UiBadge><span>{{ issue.source }} · Issue #{{ issue.id }}</span></div>
+          <h1 data-testid="issue-title">{{ issue.title }}</h1>
+          <p class="muted break-words">{{ issue.culprit || 'No culprit recorded' }}</p>
         </div>
-        <dl class="grid grid-cols-4 gap-x-6 text-sm">
-          <dt class="text-gray-500">Events</dt>
-          <dt class="text-gray-500">Users</dt>
-          <dt class="text-gray-500">First seen</dt>
-          <dt class="text-gray-500">Last seen</dt>
-          <dd class="font-semibold tabular-nums">
-            {{ compact(issue.times_seen) }}
-          </dd>
-          <dd class="font-semibold tabular-nums">
-            {{ compact(issue.users_seen) }}
-          </dd>
-          <dd :title="dateTime(issue.first_seen)">
-            {{ timeAgo(issue.first_seen)
-            }}<span v-if="issue.first_release" class="text-gray-500">
-              · {{ issue.first_release }}</span
-            >
-          </dd>
-          <dd :title="dateTime(issue.last_seen)">
-            {{ timeAgo(issue.last_seen)
-            }}<span v-if="issue.last_release" class="text-gray-500">
-              · {{ issue.last_release }}</span
-            >
-          </dd>
+        <dl class="issue-impact">
+          <div><dt>Events</dt><dd>{{ compact(issue.times_seen) }}</dd></div>
+          <div><dt>Users</dt><dd>{{ compact(issue.users_seen) }}</dd></div>
         </dl>
+      </header>
+      <div class="issue-workflow">
+        <IssueStatusBar :issue="issue" :can-change="issue.can_change_status" @updated="u => issue && Object.assign(issue, u)" />
+        <div class="flex flex-wrap gap-2"><UiCopyButton :text="shareUrl" label="Copy link" /><UiButton v-if="issue.can_delete" variant="danger" @click="deleteOpen = true">Delete issue</UiButton></div>
       </div>
-
-      <div class="mt-3 flex flex-wrap gap-2 text-xs">
-        <span
-          v-for="(n, p) in issue.platform_split"
-          :key="p"
-          class="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700"
-          >{{ platformLabel(String(p)) }}: {{ compact(n) }}</span
-        >
-      </div>
-
-      <section v-if="event" class="mt-6 grid gap-6 lg:grid-cols-3">
-        <div class="lg:col-span-2">
-          <div class="mb-3 flex flex-wrap items-center gap-3 text-sm">
-            <h2 class="font-semibold">Event</h2>
-            <span class="text-gray-500">{{ dateTime(event.ts) }}</span>
-            <button
-              class="rounded border border-gray-300 bg-white px-2 py-0.5 disabled:opacity-40"
-              :disabled="index === 0"
-              @click="index--"
-            >
-              Newer
-            </button>
-            <button
-              class="rounded border border-gray-300 bg-white px-2 py-0.5 disabled:opacity-40"
-              :disabled="index + 1 >= events.length && !nextCursor"
-              @click="older"
-            >
-              Older
-            </button>
-            <NuxtLink
-              v-if="replayLink"
-              :to="replayLink"
-              class="ml-auto rounded bg-gray-900 px-3 py-1 text-white hover:bg-gray-700"
-              data-testid="play-replay"
-            >
-              ▶ Play replay at this moment
-            </NuxtLink>
+      <div class="issue-columns">
+        <section v-if="event" class="issue-evidence" aria-label="Event details">
+          <header class="event-toolbar">
+            <div><h2>Event details</h2><p class="muted text-xs mt-1">{{ dateTime(event.ts) }}</p></div>
+            <div class="flex flex-wrap gap-2"><UiButton :disabled="index === 0 || olderBusy" @click="index--">Newer</UiButton><UiButton :disabled="index + 1 >= events.length && !nextCursor" :busy="olderBusy" @click="older">Older</UiButton></div>
+          </header>
+          <p v-if="eventError" class="field-error px-5 py-3" role="alert">{{ eventError }}</p>
+          <div class="event-context-strip">
+            <span v-if="event.user_id">User <strong>{{ event.user_id }}</strong></span>
+            <span v-if="event.browser">{{ event.browser }}</span><span v-if="event.os">{{ event.os }}</span>
+            <UiBadge v-if="event.platform">{{ platformLabel(event.platform) }}</UiBadge>
+            <UiBadge v-if="event.environment">{{ event.environment }}</UiBadge>
           </div>
-          <p
-            class="mb-3 rounded bg-gray-100 px-3 py-2 font-mono text-sm break-words"
-          >
-            {{ event.payload.type ? `${event.payload.type}: ` : ""
-            }}{{ event.payload.message }}
-          </p>
-          <div
-            v-if="http"
-            class="mb-3 rounded border border-gray-200 bg-white px-3 py-2 font-mono text-xs"
-          >
-            {{ http.method }} {{ http.url }} → {{ http.status }}
-            <span class="text-gray-500">({{ http.ms }} ms)</span>
+          <div v-if="replayLink" class="event-replay-link">
+            <div><strong>See what happened</strong><p class="muted text-xs">Open the recording just before this event.</p></div>
+            <NuxtLink :to="replayLink" class="ui-button ui-button--primary" data-testid="play-replay">▶ Play replay at this moment</NuxtLink>
           </div>
-          <div
-            v-if="ws"
-            class="mb-3 rounded border border-gray-200 bg-white px-3 py-2 font-mono text-xs"
-          >
-            {{ ws.url }} closed with code {{ ws.code }} after
-            {{ ws.reconnects ?? 0 }} reconnects
-          </div>
-          <p v-if="component" class="mb-3 text-xs text-gray-600">
-            Component: <code>{{ component }}</code>
-          </p>
-          <StackTrace
-            :frames="event.payload.frames ?? []"
-            :raw="event.payload.stack"
-          />
-
-          <h2 class="mt-6 mb-2 font-semibold">Breadcrumbs</h2>
-          <ol
-            class="divide-y divide-gray-100 rounded border border-gray-200 bg-white text-xs"
-          >
-            <li
-              v-for="(b, i) in [...(event.payload.breadcrumbs ?? [])].reverse()"
-              :key="i"
-              class="breadcrumb-entry"
-            >
-              <span class="w-16 shrink-0 text-gray-500">{{ b.cat }}</span>
-              <span class="flex-1 break-all">{{ b.msg }}</span>
-              <span class="shrink-0 text-gray-400">{{
-                b.ts > 1e12
-                  ? new Date(b.ts).toLocaleTimeString("en-GB")
-                  : `${b.ts} ms`
-              }}</span>
-            </li>
-            <li
-              v-if="!event.payload.breadcrumbs?.length"
-              class="px-3 py-1.5 text-gray-500"
-            >
-              No breadcrumbs.
-            </li>
-          </ol>
-        </div>
-        <aside>
-          <h2 class="mb-2 font-semibold">Tags</h2>
-          <dl class="tag-chips">
-            <div v-for="[k, v] in tags" :key="k">
-              <dt>
-                {{ k }}
-              </dt>
-              <dd class="break-all">
-                {{ v }}
-              </dd>
+          <details class="evidence-section" open>
+            <summary><h2>Stack trace</h2><span class="muted text-xs">{{ event.payload.frames?.length || 0 }} {{ event.payload.frames?.length === 1 ? 'frame' : 'frames' }}</span></summary>
+            <div class="evidence-content">
+              <p class="event-message">{{ event.payload.type ? `${event.payload.type}: ` : '' }}{{ event.payload.message }}</p>
+              <p v-if="http" class="code-block mb-4">{{ http.method }} {{ http.url }} → {{ http.status }} ({{ http.ms }} ms)</p>
+              <p v-if="ws" class="code-block mb-4">{{ ws.url }} closed with code {{ ws.code }} after {{ ws.reconnects ?? 0 }} reconnects</p>
+              <p v-if="component" class="muted text-xs mb-3">Component: <code>{{ component }}</code></p>
+              <StackTrace :frames="event.payload.frames ?? []" :raw="event.payload.stack" />
             </div>
-          </dl>
+          </details>
+          <details class="evidence-section" open>
+            <summary><h2>Breadcrumbs</h2><span class="muted text-xs">{{ event.payload.breadcrumbs?.length || 0 }} recorded</span></summary>
+            <div class="evidence-content">
+              <UiInput v-model="breadcrumbSearch" type="search" label="Search breadcrumbs" placeholder="Search message or category" class="mb-4" />
+              <ol class="breadcrumb-list">
+                <li v-for="(b,i) in breadcrumbs" :key="i" class="breadcrumb-entry"><UiBadge>{{ b.cat }}</UiBadge><span class="break-all">{{ b.msg }}</span><span class="muted">{{ b.ts > 1e12 ? new Date(b.ts).toLocaleTimeString('en-GB') : `${b.ts} ms` }}</span></li>
+                <li v-if="!breadcrumbs.length" class="muted p-4">{{ breadcrumbSearch ? 'No breadcrumbs match.' : 'No breadcrumbs.' }}</li>
+              </ol>
+            </div>
+          </details>
+        </section>
+        <UiEmptyState v-else title="No retained events" description="This issue's event details have expired under the project's retention policy." />
+        <aside class="issue-sidebar" aria-label="Issue context">
+          <section><h2>Issue overview</h2><dl class="issue-facts">
+            <div><dt>Last seen</dt><dd><UiRelativeTime :value="issue.last_seen" /><small v-if="issue.last_release">{{ issue.last_release }}</small></dd></div>
+            <div><dt>First seen</dt><dd><UiRelativeTime :value="issue.first_seen" /><small v-if="issue.first_release">{{ issue.first_release }}</small></dd></div>
+          </dl></section>
+          <section><h2>Platforms</h2><dl class="platform-breakdown"><div v-for="(n,p) in issue.platform_split" :key="p"><dt>{{ platformLabel(String(p)) }}</dt><dd>{{ compact(n) }}</dd></div></dl></section>
+          <section><h2>Tags &amp; context</h2><dl class="issue-tags"><div v-for="[k,v] in tags" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></div></dl></section>
         </aside>
-      </section>
+      </div>
     </template>
-    <UiConfirmDialog
-      v-model="deleteOpen"
-      title="Delete issue?"
-      description="This permanently removes the issue and its stored events. New occurrences can create a new issue."
-      action="Delete issue"
-      :busy="deleting"
-      @confirm="remove"
-    />
+    <UiConfirmDialog v-model="deleteOpen" title="Delete issue?" description="This permanently removes the issue and its stored events. New occurrences can create a new issue." action="Delete issue" :busy="deleting" @confirm="remove" />
   </div>
 </template>

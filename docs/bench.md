@@ -334,3 +334,15 @@ All uploaded-segment, redaction and throttling checks passed. A subsequent singl
 replacement for the three-run result. The hard snapshot budget remains open. Android platform tools are
 installed on this machine, but `adb devices -l` found no connected device on 2026-11-06. T-51 hardware,
 30-minute heap/thermal and APK lifecycle acceptance cannot be certified from desktop emulation.
+
+### Sentry-style dashboard follow-up — 2026-11-06
+
+Measured with `node scripts/dashboard-size.mjs`: 35 emitted JS/CSS files, 570,291 B raw,
+199,200 B independently gzipped, including lazy replay and its worker. Original pre-overhaul:
+177,769 B gzip; initial overhaul: 203,371 B gzip; current follow-up: 199,200 B gzip
+(4,171 B smaller than the initial overhaul). No runtime UI dependency added.
+
+The final local end-to-end recheck measured issue visibility at 3,953 ms and the 60-minute fixture's
+first frame at 602–669 ms (632 ms median), within the existing 5 s / 1 s budgets. These are
+desktop results, not Android hardware acceptance. UI refinement does not change SDK capture
+or ingest behavior.

@@ -5,7 +5,7 @@ const tab = ref("nuxt");
 const snippet = computed(() => {
   const dsn = props.project.dsn;
   if (tab.value === "nuxt")
-    return `// nuxt.config.ts\nexport default defineNuxtConfig({\n  modules: ['@replayd/nuxt'],\n  runtimeConfig: { public: {\n    app_version: process.env.APP_VERSION,\n    replayd: {\n      dsn: ${JSON.stringify(dsn)},\n      environment: 'production',\n    },\n  } },\n  sourcemap: { client: 'hidden' },\n})`;
+    return `// nuxt.config.ts\nexport default defineNuxtConfig({\n  modules: ['@replayd/nuxt'],\n  appConfig: { app_version: process.env.APP_VERSION },\n  runtimeConfig: { public: {\n    replayd: {\n      dsn: ${JSON.stringify(dsn)},\n      environment: 'production',\n    },\n  } },\n  sourcemap: { client: 'hidden' },\n})`;
   const url = new URL(dsn);
   url.username = "";
   url.password = "";

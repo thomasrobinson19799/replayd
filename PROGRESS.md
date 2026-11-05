@@ -53,10 +53,10 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | ID | Task | Status | Notes / blockers |
 |---|---|---|---|
 | T-40 | `@replayd/nuxt`, `@replayd/vue`, `@replayd/react`, IIFE build | done | Vue errorHandler chain (component + info), React root handler + ErrorBoundary, Nuxt module + client plugin (runtime config, app_version release, self/apiHost, chained handler + app:error), IIFE data-attribute auto-init; core dedups already-reported errors (D-28). examples/{html,vue,react,nuxt} + e2e/adapters.e2e.mjs: each app → exactly 1 issue with adapter context. Adapters 302/436/416 B. |
-| T-41 | `replayd-wp` plugin | blocked | Plugin done and verified locally: wordpress/replayd-wp (settings page, first-in-head `defer` tag with data-* config, no inline script, WP Rocket filters per D-08, uninstall). PHP unit tests (25 checks, `docker run php:8.3-cli php wordpress/replayd-wp/tests/run.php`) + e2e/wordpress.e2e.mjs on real WordPress 6.8: tag first in head, error before interaction + click error arrive, replay recorded. **Blocked:** acceptance needs the staging fxglory.com install (no access); WP Rocket real-code run on the WP page not repeated here (T-04 covers the same patterns). |
+| T-41 | `replayd-wp` plugin | blocked | Implementation and local acceptance complete. PHP checks and real WordPress 6.8 pass. Repeated against actual WP Rocket v3.24 DelayJS code on the WordPress page: negative control delays the SDK; plugin exclusions preserve capture before interaction. See docs/spikes/T-04.md. **Remaining:** staging fxglory.com URL/access and site-specific cache/CDN acceptance. |
 | T-50 | Observability: metrics, JSON logs, Grafana JSON, alert rules | done | Prometheus exporter + /metrics (internal), queue depth / disk / symbolication / Telegram / API-latency metrics, API request JSON logs with req_id + latency_ms (D-29); deploy/observability: Grafana dashboard (18 panels), 6 alert rules, scrape example. e2e/observability.e2e.mjs: promtool OK, live scrape, all dashboard queries valid, imports into Grafana 12.1. |
-| T-51 | Benchmarks vs Sentry config, real-device APK checklist | blocked | sdk/bench/perf/compare.mjs vs @sentry/browser 11.10 with the terminals' config: replayd 1/5 of the main-thread time at 4×, 6.96 vs 98.5 KB up front, 1.55 vs 6.83 KB/s uplink. Server re-check: events p99 3.97 ms, replay p99 1.10 ms at 2k/s. Budget table in docs/bench.md. **Blocked:** real-device run of docs/apk-checklist.md (no device), which also settles the open snapshot budget. |
-| T-52 | Migration: replace Sentry in 3 terminals + sites | blocked | docs/migration.md (nginx /sentry → /_rp, Nuxt config diff, CI source-map job, WordPress, APK, clean-up checklist). **Blocked:** the terminal / site repositories are not available in this session. |
+| T-51 | Benchmarks vs Sentry config, real-device APK checklist | blocked | Windows benchmark runners fixed and SDK checks pass (139 tests, size limits unchanged). Three-run snapshot median: 23.00 ms at 1×, 171.21 ms at 4×; batch p95 0.79/3.26 ms (existing D-20 exception). See docs/bench.md. **Remaining:** reliable <150 ms snapshot acceptance and physical Android lifecycle, 30-minute heap/thermal evidence. Android tools installed; no connected device on 2026-11-06. |
+| T-52 | Migration: replace Sentry in 3 terminals + sites | blocked | Shared terminal repo located and its existing migration verified at ef67dffcc10d4f554656af4503b28994fe08cfce. All 9 brand/platform configs reference replayd; source-map CI and Sentry removal pass the read-only inventory. See docs/terminal-migration-evidence.json and docs/migration.md. **Remaining:** website repositories/staging and live rollout evidence. No changes or deployment to the external repo. |
 
 ## Dashboard completion and UI overhaul (owner request, 2026-11-05)
 | ID | Task | Status | Notes / acceptance |
@@ -65,29 +65,32 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | UI-02 | Shared design system, shell, projects, users and account | done | Responsive sidebar, themes, reusable controls, real activity, setup snippets, user management and password flow; dashboard lint/typecheck/build and 22 Vitest tests pass. Real browser project creation, user creation/disable/enable, password/session revocation and keyboard flows pass. |
 | UI-03 | Triage, replay and settings completion | done | URL restoration, bounded session paging, role-aware bulk controls, custom ignore, replay search/follow/network inspector/fullscreen, dirty guard and feedback. All dashboard checks pass; browser checks cover timeline, fullscreen, Device search and all settings tabs. Direct-page nginx routing fixed (D-32). |
 | UI-04 | Visual, end-to-end and performance acceptance | done | Final local images/stack verified; all 11 non-WordPress e2e suites pass, plus populated-screen pointer/keyboard checks. 39 screenshots at 1440/1024/525px; 22 dashboard tests; server fmt/Clippy/tests pass. Bundle gzip 177,769 → 203,371 B; issue visibility 3,936ms; 60-min first frame 607–688ms; session-query worst p95 10ms. T-41/T-51/T-52 stay blocked. No push or production deployment. |
+| UI-05 | Owner-selected Sentry-style triage and recovery | done | Plum navigation, violet controls, evidence/context columns, searchable breadcrumbs, recoverable and race-safe event loading, accurate Nuxt release snippet, responsive Ignore and theme-aware error page. 26 dashboard tests and required checks pass; all 12 local e2e suites pass including WordPress/WP Rocket; 45 screenshots. Independent design review's material findings fixed and browser-verified; rendered control contrast passes both themes. Current bundle 199,200 B gzip. |
+| T-41-local | Recheck WordPress with actual WP Rocket | done | Real WordPress page plus actual v3.24 DelayJS code and runtime; negative control, exclusion and capture checks pass. Parent T-41 retains its staging gate. |
+| T-51-local | Windows benchmark reproduction | done | URL-to-path/browser selection fixed; three-run 1×/4× evidence recorded without loosening budgets. Parent T-51 remains open on snapshot/hardware acceptance. |
+| T-52-source | Verify available shared-terminal migration | done | Read-only inventory passes all 9 brand/platform configs and source-map CI at recorded commit. Parent T-52 retains site/live rollout gates. |
 
-## Continue in a new session (paste this prompt)
-```
-You are continuing the "replayd" project in this repo (branches claude/sweet-clarke-h5srzw and
-claude/brave-turing-2e28k0 are kept identical; push to both).
-Read PRD.md (including the Decisions log at the end), AGENTS.md and PROGRESS.md, then `git log --oneline | head -30`.
-Continue from the first task in PROGRESS.md that is not `done`/`skipped`, milestone by milestone through M5, without
-stopping between milestones. Follow AGENTS.md rules and the owner's working agreement in it (per task: implement →
-tests → checks → commit "T-xx: <title>" → tick PROGRESS.md → push). Record deviations in the PRD Decisions log and
-numbers in docs/bench.md. Never loosen a budget (D-20 is the owner's explicit exception for the 4× batch figure).
-Environment notes:
-- Docker: `nohup dockerd >/tmp/dockerd.log 2>&1 &` if not running. Docker Hub may answer 429: pull from
-  mirror.gcr.io and retag (postgres:17, nginx:1.29.8-alpine, node:22-alpine, arigaio/atlas:1.3.6).
-- `make db` (Postgres 17 + Atlas on :55432), `make test`, `make up` (stack on :8088, admin password change-me-now →
-  E2E_ADMIN_PASSWORD=change-me-now). After server/dashboard changes: `make images` + compose up again.
-- The replayd image is distroless (uid 65532): never `docker cp` into /data without `-a` + chown 65532.
-- e2e (stack up, `pnpm -C sdk build`): e2e/issues, player (60-min fixture via gen-replay.mjs INSTALL=1),
-  sdk-replay, capacitor, sourcemaps (*.e2e.mjs). SDK perf: `node sdk/bench/perf/replay.mjs` (slow: ~6 min per
-  scenario at REPEAT=3; set CATS=devtools.timeline,disabled-by-default-devtools.timeline for snapshot timing).
-Before stopping for any reason: commit, push, and update this section if the workflow changed.
-```
+## Continue in a new session
+
+Read PRD.md (including decisions), AGENTS.md, this tracker, docs/dashboard-audit.md,
+docs/bench.md and docs/migration.md. Work continues from `codex/ui-05-sentry-triage`.
+The owner selected Sentry-like dashboard conventions and delegated routine choices.
+Do not push or deploy. Preserve the completed implementation and local verification.
+
+The remaining acceptance gates need WordPress/site staging access, physical Android
+hardware and live migration evidence. The shared terminal source migration is already
+verified; do not repeat or overwrite it blindly. Do not mark those gates done from
+emulation or static source checks. The 4× snapshot budget is still open; do not loosen it.
+
+Windows: use installed Chrome via `e2e/chrome-preload.mjs`, or `PLAYWRIGHT_CHANNEL=chrome`
+for SDK benchmarks. `scripts/local-stack.ps1` starts already-built local images with the
+required Docker Desktop proxy and mock Telegram configuration. `node e2e/run-local.mjs`
+now includes WordPress; `data/wp-rocket` supplies the actual optional WP Rocket v3.24
+source for compatibility checks. `scripts/bench-local.ps1` reproduces SDK measurements.
+Required checks and per-task commits remain defined in AGENTS.md.
 
 ## Session log
+- 2026-11-06: Owner delegated remaining design choices and selected Sentry conventions (D-33). UI-05 complete with independent review, final local image rebuild and 45 responsive/open/theme screenshots. Local WordPress+WP Rocket and shared-terminal source blockers resolved; physical Android, WordPress staging/site access and reliable snapshot-budget acceptance remain explicit gates. Required dashboard/SDK checks and all 12 integration suites pass. Work is committed locally on the cumulative task branch `codex/ui-05-sentry-triage`; no push or deployment. Updated continuation instructions remove the obsolete instruction to push old branches.
 - 2026-11-05: Completed owner's dashboard/API audit and overhaul on `ui-overhaul`, with logical local commits only. UI-01…UI-04 done; acceptance, page screenshots and remaining limits in `docs/dashboard-audit.md`, measurements in `docs/bench.md`, design contract in `DESIGN.md`. Final `node e2e/run-local.mjs`: 11/11 passed (WordPress excluded); local images rebuilt and stack left running on :8088. The owner's current instruction overrides the historical continuation prompt above: **do not push or deploy**. T-41/T-51/T-52 are still blocked.
 - 2026-11-04: Local verification on Windows 11 + Docker Desktop (WordPress, APK device and app-repo tasks skipped by owner). All checks + e2e (issues, sdk-replay, issue-status, capacitor, sourcemaps, remote-config, adapters, player, alerts, observability) green after fixes recorded in D-30. Locally the site-tunnel hop is Docker Desktop's gateway: start the stack with `REPLAYD_SITE_PROXIES=172.30.53.1` (alerts e2e also needs `REPLAYD_TELEGRAM_API=http://host.docker.internal:18099`). Windows notes: Playwright's browser CDN was unreachable, so e2e ran against installed Chrome via a `NODE_OPTIONS=--import=<preload>` that sets `channel: 'chrome'`; no `make` → run the Makefile steps directly.
 - 2026-11-03: M5: T-40, T-50 done; T-41 (staging access), T-51 (device), T-52 (app repos) blocked on external access.
