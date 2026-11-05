@@ -187,6 +187,24 @@ async fn rbac_matrix_over_http() {
     let cases: Vec<(Method, String, Option<Value>, [S; 5])> = vec![
         (
             Method::GET,
+            format!("{p}/stats?range=24h"),
+            None,
+            [S::OK, S::OK, S::OK, S::OK, S::NOT_FOUND],
+        ),
+        (
+            Method::GET,
+            format!("{p}/stats?range=all"),
+            None,
+            [
+                S::BAD_REQUEST,
+                S::BAD_REQUEST,
+                S::BAD_REQUEST,
+                S::BAD_REQUEST,
+                S::NOT_FOUND,
+            ],
+        ),
+        (
+            Method::GET,
             p.clone(),
             None,
             [S::OK, S::OK, S::OK, S::OK, S::NOT_FOUND],
@@ -438,6 +456,231 @@ async fn rbac_matrix_over_http() {
         .unwrap()
         .get(0);
     assert!(n >= 4);
+
+    // Own password: CSRF and old-password validation, current session survives, others do not.
+    let second = login(&app, &format!("viewer-{tag}@it.example")).await;
+    let change = json!({"current_password": "test-password-123", "new_password": "replacement-password-456"});
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[3]),
+            Method::POST,
+            "/api/me/password",
+            Some(change.clone()),
+            false
+        )
+        .await
+        .0,
+        S::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[3]),
+            Method::POST,
+            "/api/me/password",
+            Some(json!({"current_password":"wrong-password", "new_password":"replacement-password-456"})),
+            true
+        )
+        .await
+        .0,
+        S::BAD_REQUEST
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[3]),
+            Method::POST,
+            "/api/me/password",
+            Some(json!({"current_password":"test-password-123", "new_password":"short"})),
+            true
+        )
+        .await
+        .0,
+        S::BAD_REQUEST
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[3]),
+            Method::POST,
+            "/api/me/password",
+            Some(change),
+            true
+        )
+        .await
+        .0,
+        S::NO_CONTENT
+    );
+    assert_eq!(
+        call(&app, Some(&sessions[3]), Method::GET, "/api/me", None, true)
+            .await
+            .0,
+        S::OK
+    );
+    assert_eq!(
+        call(&app, Some(&second), Method::GET, "/api/me", None, true)
+            .await
+            .0,
+        S::UNAUTHORIZED
+    );
+    let hash: String = c
+        .query_one("SELECT password_hash FROM users WHERE id = $1", &[&ids[3]])
+        .await
+        .unwrap()
+        .get(0);
+    assert!(auth::verify_password("replacement-password-456", Some(&hash)));
+    assert!(!auth::verify_password("test-password-123", Some(&hash)));
+
+    // An admin may add an existing account by exact email without directory access.
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[1]),
+            Method::POST,
+            &format!("{p}/members"),
+            Some(json!({"email":format!("outsider-{tag}@it.example"), "role":"member"})),
+            true
+        )
+        .await
+        .0,
+        S::NO_CONTENT
+    );
+    // Viewer cannot delete; active sessions cannot be deleted even by an admin.
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[3]),
+            Method::DELETE,
+            &format!("/api/issues/{iid}"),
+            None,
+            true
+        )
+        .await
+        .0,
+        S::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[3]),
+            Method::DELETE,
+            &format!("/api/sessions/{sid}"),
+            None,
+            true
+        )
+        .await
+        .0,
+        S::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[1]),
+            Method::DELETE,
+            &format!("/api/sessions/{sid}"),
+            None,
+            true
+        )
+        .await
+        .0,
+        S::BAD_REQUEST
+    );
+    c.execute("UPDATE sessions SET ended = true WHERE id = $1", &[&sid])
+        .await
+        .unwrap();
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[1]),
+            Method::DELETE,
+            &format!("/api/sessions/{sid}"),
+            None,
+            true
+        )
+        .await
+        .0,
+        S::NO_CONTENT
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[1]),
+            Method::GET,
+            &format!("/api/sessions/{sid}/recording"),
+            None,
+            true
+        )
+        .await
+        .0,
+        S::NOT_FOUND
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[1]),
+            Method::DELETE,
+            &format!("/api/issues/{iid}"),
+            None,
+            true
+        )
+        .await
+        .0,
+        S::NO_CONTENT
+    );
+
+    // User administration: reset and disable revoke sessions; self-demotion is rejected.
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[0]),
+            Method::PATCH,
+            &format!("/api/users/{}", ids[0]),
+            Some(json!({"is_superadmin":false})),
+            true
+        )
+        .await
+        .0,
+        S::BAD_REQUEST
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[0]),
+            Method::PATCH,
+            &format!("/api/users/{}", ids[4]),
+            Some(json!({"password":"reset-password-456"})),
+            true
+        )
+        .await
+        .0,
+        S::OK
+    );
+    assert_eq!(
+        call(&app, Some(&sessions[4]), Method::GET, "/api/me", None, true)
+            .await
+            .0,
+        S::UNAUTHORIZED
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[0]),
+            Method::PATCH,
+            &format!("/api/users/{}", ids[3]),
+            Some(json!({"disabled":true})),
+            true
+        )
+        .await
+        .0,
+        S::OK
+    );
+    assert_eq!(
+        call(&app, Some(&sessions[3]), Method::GET, "/api/me", None, true)
+            .await
+            .0,
+        S::UNAUTHORIZED
+    );
 
     c.execute(
         "DELETE FROM projects WHERE slug = ANY($1)",

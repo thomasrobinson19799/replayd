@@ -56,6 +56,7 @@ pub struct ListQuery {
     source: Option<String>,
     platform: Option<String>,
     release: Option<String>,
+    environment: Option<String>,
     q: Option<String>,
     sort: Option<String>,
     page: Option<i64>,
@@ -98,6 +99,14 @@ pub async fn list(
             &mut params,
             " AND (first_release = $? OR last_release = $?)",
             r,
+        );
+    }
+    if let Some(env) = q.environment.filter(|s| !s.is_empty()) {
+        add(
+            &mut sql,
+            &mut params,
+            " AND EXISTS (SELECT 1 FROM events e WHERE e.issue_id = issues.id AND e.project_id = issues.project_id AND e.ts >= now() - interval '14 days' AND e.environment = $?)",
+            env,
         );
     }
     if let Some(text) = q.q.filter(|s| !s.trim().is_empty()) {
@@ -195,7 +204,27 @@ pub async fn get_one(
         .await?;
     v["latest_event"] = latest.as_ref().map(event_json).unwrap_or(Value::Null);
     v["can_change_status"] = json!(user.can(&st, r.get(1), Perm::ChangeIssueStatus));
+    v["can_delete"] = json!(user.can(&st, r.get(1), Perm::Delete));
     Ok(Json(v))
+}
+
+pub async fn delete(
+    State(st): State<Arc<ApiState>>,
+    user: Auth,
+    Path(id): Path<i64>,
+) -> ApiResult<axum::http::StatusCode> {
+    let r = load_issue(&st, &user, id).await?;
+    user.require(&st, r.get(1), Perm::Delete)?;
+    let mut c = st.pool.get().await?;
+    let tx = c.transaction().await?;
+    tx.execute("DELETE FROM events WHERE issue_id = $1", &[&id])
+        .await?;
+    tx.execute("DELETE FROM alerts_sent WHERE issue_id = $1", &[&id])
+        .await?;
+    tx.execute("DELETE FROM issues WHERE id = $1", &[&id]).await?;
+    tx.commit().await?;
+    crate::audit(&st, &user, "issue.delete", &id.to_string(), json!({})).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 #[derive(Deserialize)]

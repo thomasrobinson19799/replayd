@@ -424,6 +424,39 @@ pub struct SetMember {
     role: String,
 }
 
+#[derive(Deserialize)]
+pub struct AddMember {
+    email: String,
+    role: String,
+}
+
+pub async fn add_member(
+    State(st): State<Arc<ApiState>>,
+    user: Auth,
+    Path(pid): Path<String>,
+    Json(req): Json<AddMember>,
+) -> ApiResult<StatusCode> {
+    let id = resolve(&st, &pid)?;
+    user.require(&st, id, Perm::ProjectSettings)?;
+    let c = st.pool.get().await?;
+    let row = c
+        .query_opt(
+            "SELECT id FROM users WHERE email = $1 AND NOT disabled",
+            &[&req.email.trim().to_ascii_lowercase()],
+        )
+        .await?
+        .ok_or(ApiError::BadRequest(
+            "no active account with that email; ask a superadmin to create it".into(),
+        ))?;
+    set_member(
+        State(st),
+        user,
+        Path((pid, row.get(0))),
+        Json(SetMember { role: req.role }),
+    )
+    .await
+}
+
 pub async fn set_member(
     State(st): State<Arc<ApiState>>,
     user: Auth,

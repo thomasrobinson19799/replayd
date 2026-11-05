@@ -58,6 +58,14 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | T-51 | Benchmarks vs Sentry config, real-device APK checklist | blocked | sdk/bench/perf/compare.mjs vs @sentry/browser 11.10 with the terminals' config: replayd 1/5 of the main-thread time at 4×, 6.96 vs 98.5 KB up front, 1.55 vs 6.83 KB/s uplink. Server re-check: events p99 3.97 ms, replay p99 1.10 ms at 2k/s. Budget table in docs/bench.md. **Blocked:** real-device run of docs/apk-checklist.md (no device), which also settles the open snapshot budget. |
 | T-52 | Migration: replace Sentry in 3 terminals + sites | blocked | docs/migration.md (nginx /sentry → /_rp, Nuxt config diff, CI source-map job, WordPress, APK, clean-up checklist). **Blocked:** the terminal / site repositories are not available in this session. |
 
+## Dashboard completion and UI overhaul (owner request, 2026-11-05)
+| ID | Task | Status | Notes / acceptance |
+|---|---|---|---|
+| UI-01 | PRD audit and missing dashboard APIs | done | docs/dashboard-audit.md; own password + revoke other sessions atomically; hourly statistics; environment filter; admin issue/ended-session deletion; project-admin member add by exact email. Rust fmt, Clippy -D warnings, full tests including PostgreSQL RBAC/account tests pass. |
+| UI-02 | Shared design system, shell, projects, users and account | wip | Responsive sidebar, themes, reusable controls, real activity, setup snippets, user management and password flow; dashboard lint/typecheck/build and 21 Vitest tests pass. Browser verification in progress. |
+| UI-03 | Triage, replay and settings completion | wip | URL restoration, bounded session paging, role-aware bulk controls, custom ignore, replay search/follow/network inspector/fullscreen, dirty guard and feedback. Browser verification in progress. |
+| UI-04 | Visual, end-to-end and performance acceptance | wip | Local images rebuilt; all non-WordPress suites queued. T-41/T-51/T-52 stay blocked. No push or production deployment. |
+
 ## Continue in a new session (paste this prompt)
 ```
 You are continuing the "replayd" project in this repo (branches claude/sweet-clarke-h5srzw and

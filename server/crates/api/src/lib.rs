@@ -8,6 +8,7 @@ pub mod rbac;
 pub mod redact_rpl;
 pub mod sessions;
 pub mod sourcemaps;
+pub mod stats;
 pub mod users;
 
 use std::net::{IpAddr, SocketAddr};
@@ -130,6 +131,7 @@ pub fn router(st: Arc<ApiState>) -> Router {
         .route("/api/auth/login", post(login))
         .route("/api/auth/logout", post(logout))
         .route("/api/me", get(me))
+        .route("/api/me/password", post(users::change_password))
         .route("/api/users", get(users::list).post(users::create))
         .route("/api/users/{id}", patch(users::update).delete(users::delete))
         .route("/api/projects", get(projects::list).post(projects::create))
@@ -141,17 +143,29 @@ pub fn router(st: Arc<ApiState>) -> Router {
         )
         .route("/api/projects/{pid}/keys/rotate", post(projects::rotate_key))
         .route("/api/projects/{pid}/telegram/test", post(projects::telegram_test))
-        .route("/api/projects/{pid}/members", get(projects::members))
+        .route(
+            "/api/projects/{pid}/members",
+            get(projects::members).post(projects::add_member),
+        )
         .route(
             "/api/projects/{pid}/members/{uid}",
             put(projects::set_member).delete(projects::remove_member),
         )
         .route("/api/projects/{pid}/issues", get(issues::list))
+        .route("/api/projects/{pid}/stats", get(stats::get))
         .route("/api/issues", patch(issues::patch_bulk))
-        .route("/api/issues/{id}", get(issues::get_one).patch(issues::patch_one))
+        .route(
+            "/api/issues/{id}",
+            get(issues::get_one)
+                .patch(issues::patch_one)
+                .delete(issues::delete),
+        )
         .route("/api/issues/{id}/events", get(issues::events))
         .route("/api/projects/{pid}/sessions", get(sessions::list))
-        .route("/api/sessions/{sid}", get(sessions::get_one))
+        .route(
+            "/api/sessions/{sid}",
+            get(sessions::get_one).delete(sessions::delete),
+        )
         .route("/api/sessions/{sid}/recording", get(sessions::recording))
         .route("/api/projects/{pid}/releases", post(sourcemaps::create_release))
         .route(

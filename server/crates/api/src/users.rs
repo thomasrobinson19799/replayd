@@ -26,6 +26,67 @@ pub(crate) fn user_json(r: &replayd_db::tokio_postgres::Row) -> Value {
 const USER_COLS: &str =
     "id, email, name, is_superadmin, disabled, (extract(epoch from created_at) * 1000)::bigint";
 
+#[derive(Deserialize)]
+pub struct ChangePassword {
+    current_password: String,
+    new_password: String,
+}
+
+/// Keep the calling session; revoke other sessions atomically with the password update.
+pub async fn change_password(
+    State(st): State<Arc<ApiState>>,
+    user: Auth,
+    Json(req): Json<ChangePassword>,
+) -> ApiResult<StatusCode> {
+    auth::validate_password(&req.new_password)?;
+    auth::validate_password(&req.current_password)?;
+    st.login_email
+        .take(
+            crate::email_key(&user.email),
+            1.0 / 12.0,
+            5.0,
+            std::time::Instant::now(),
+        )
+        .map_err(ApiError::TooMany)?;
+    let mut c = st.pool.get().await?;
+    let stored: String = c
+        .query_one("SELECT password_hash FROM users WHERE id = $1", &[&user.user_id])
+        .await?
+        .get(0);
+    let old = stored.clone();
+    let verified =
+        tokio::task::spawn_blocking(move || auth::verify_password(&req.current_password, Some(&old)))
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if !verified {
+        return Err(ApiError::BadRequest("current password is incorrect".into()));
+    }
+    let new_hash = hash(req.new_password).await?;
+    let tx = c.transaction().await?;
+    // Compare the old hash so concurrent changes cannot resurrect an obsolete password.
+    let n = tx
+        .execute(
+            "UPDATE users SET password_hash = $2 WHERE id = $1 AND password_hash = $3 AND NOT disabled",
+            &[&user.user_id, &new_hash, &stored],
+        )
+        .await?;
+    if n != 1 {
+        return Err(ApiError::BadRequest("account changed; sign in again".into()));
+    }
+    tx.execute(
+        "DELETE FROM user_sessions WHERE user_id = $1 AND token_hash <> $2",
+        &[&user.user_id, &user.token_hash],
+    )
+    .await?;
+    tx.execute(
+        "INSERT INTO audit_log (user_id, action, target, data) VALUES ($1, 'account.password', $2, '{}')",
+        &[&user.user_id, &user.user_id.to_string()],
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn list(State(st): State<Arc<ApiState>>, user: Auth) -> ApiResult<Json<Value>> {
     user.require_superadmin()?;
     let c = st.pool.get().await?;

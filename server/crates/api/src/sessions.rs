@@ -255,7 +255,38 @@ pub async fn get_one(
         v["project_slug"] = json!(p.row.slug);
     }
     v["can_view_sensitive"] = json!(user.can(&st, pid, Perm::ViewSensitive));
+    v["can_delete"] = json!(user.can(&st, pid, Perm::Delete));
     Ok(Json(v))
+}
+
+pub async fn delete(
+    State(st): State<Arc<ApiState>>,
+    user: Auth,
+    Path(sid): Path<String>,
+) -> ApiResult<StatusCode> {
+    let r = load(&st, &user, &sid).await?;
+    let pid: i32 = r.get(1);
+    user.require(&st, pid, Perm::Delete)?;
+    if !r.get::<_, bool>(4) {
+        return Err(ApiError::BadRequest("only ended sessions can be deleted".into()));
+    }
+    let id = Uuid::try_parse(&sid).map_err(|_| ApiError::NotFound)?;
+    let day: String = r.get(29);
+    let path = recording_path(&st.data_dir, pid, &day, &id.to_string());
+    match tokio::fs::remove_file(&path).await {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(ApiError::Internal(e.to_string())),
+    }
+    let c = st.pool.get().await?;
+    c.execute(
+        "DELETE FROM sessions WHERE id = $1 AND project_id = $2",
+        &[&id, &pid],
+    )
+    .await?;
+    crate::audit(&st, &user, "session.delete", &sid, json!({})).await?;
+    // Redacted derivatives remain inaccessible after the metadata deletion and are swept by retention.
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub fn recording_path(data_dir: &std::path::Path, project_id: i32, day: &str, sid: &str) -> PathBuf {
