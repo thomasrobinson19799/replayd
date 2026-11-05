@@ -1,79 +1,113 @@
 <script setup lang="ts">
-import type { IssueDetail, IssueEvent } from '~/utils/types'
+import type { IssueDetail, IssueEvent } from "~/utils/types";
 
-const route = useRoute()
-const api = useApi()
-const pid = computed(() => route.params.pid as string)
-const id = computed(() => route.params.id as string)
+const route = useRoute();
+const api = useApi();
+const pid = computed(() => route.params.pid as string);
+const id = computed(() => route.params.id as string);
 
-const issue = ref<IssueDetail | null>(null)
-const events = ref<IssueEvent[]>([])
-const nextCursor = ref<string | null>(null)
-const index = ref(0)
-const error = ref('')
+const issue = ref<IssueDetail | null>(null);
+const events = ref<IssueEvent[]>([]);
+const nextCursor = ref<string | null>(null);
+const index = ref(0);
+const error = ref("");
+const deleting = ref(false);
+const deleteOpen = ref(false);
+async function remove() {
+  deleting.value = true;
+  try {
+    await api.del(`/issues/${id.value}`);
+    await navigateTo(`/projects/${pid.value}/issues`);
+  } catch (e) {
+    error.value = errorMessage(e);
+    deleteOpen.value = false;
+  } finally {
+    deleting.value = false;
+  }
+}
 
-const event = computed<IssueEvent | null>(() => events.value[index.value] ?? issue.value?.latest_event ?? null)
+const event = computed<IssueEvent | null>(
+  () => events.value[index.value] ?? issue.value?.latest_event ?? null,
+);
 
 async function load() {
+  error.value = "";
+  issue.value = null;
   try {
     const [i, ev] = await Promise.all([
       api.get<IssueDetail>(`/issues/${id.value}`),
-      api.get<{ events: IssueEvent[], next_cursor: string | null }>(`/issues/${id.value}/events`),
-    ])
-    issue.value = i
-    events.value = ev.events
-    nextCursor.value = ev.next_cursor
-    index.value = 0
-  }
-  catch (e) {
-    error.value = errorMessage(e)
+      api.get<{ events: IssueEvent[]; next_cursor: string | null }>(
+        `/issues/${id.value}/events`,
+      ),
+    ]);
+    issue.value = i;
+    events.value = ev.events;
+    nextCursor.value = ev.next_cursor;
+    index.value = 0;
+  } catch (e) {
+    error.value = errorMessage(e);
   }
 }
 
 async function older() {
   if (index.value + 1 < events.value.length) {
-    index.value++
-    return
+    index.value++;
+    return;
   }
-  if (!nextCursor.value) return
-  const ev = await api.get<{ events: IssueEvent[], next_cursor: string | null }>(
-    `/issues/${id.value}/events`, { query: { cursor: nextCursor.value } })
-  events.value.push(...ev.events)
-  nextCursor.value = ev.next_cursor
-  if (index.value + 1 < events.value.length) index.value++
+  if (!nextCursor.value) return;
+  const ev = await api.get<{
+    events: IssueEvent[];
+    next_cursor: string | null;
+  }>(`/issues/${id.value}/events`, { query: { cursor: nextCursor.value } });
+  events.value.push(...ev.events);
+  nextCursor.value = ev.next_cursor;
+  if (index.value + 1 < events.value.length) index.value++;
 }
 
 const tags = computed(() => {
-  const e = event.value
-  if (!e) return []
-  const app = e.payload.ctx?.app as Record<string, string> | undefined
+  const e = event.value;
+  if (!e) return [];
+  const app = e.payload.ctx?.app as Record<string, string> | undefined;
   const rows: [string, string | null | undefined][] = [
-    ['platform', e.platform ? platformLabel(e.platform) : null],
-    ['release', e.release],
-    ['environment', e.environment],
-    ['app version', e.app_version],
-    ['device', app?.device],
-    ['os', e.os],
-    ['webview', app?.webview],
-    ['browser', e.browser ? `${e.browser} ${e.payload.browser_ver ?? ''}`.trim() : null],
-    ['user', e.user_id],
-    ['url', e.url],
-    ...Object.entries(e.payload.tags ?? {}).map(([k, v]) => [k, String(v)] as [string, string]),
-  ]
-  return rows.filter(([, v]) => v)
-})
+    ["platform", e.platform ? platformLabel(e.platform) : null],
+    ["release", e.release],
+    ["environment", e.environment],
+    ["app version", e.app_version],
+    ["device", app?.device],
+    ["os", e.os],
+    ["webview", app?.webview],
+    [
+      "browser",
+      e.browser ? `${e.browser} ${e.payload.browser_ver ?? ""}`.trim() : null,
+    ],
+    ["user", e.user_id],
+    ["url", e.url],
+    ...Object.entries(e.payload.tags ?? {}).map(
+      ([k, v]) => [k, String(v)] as [string, string],
+    ),
+  ];
+  return rows.filter(([, v]) => v);
+});
 
-const http = computed(() => event.value?.payload.ctx?.http as Record<string, unknown> | undefined)
-const ws = computed(() => event.value?.payload.ctx?.ws as Record<string, unknown> | undefined)
-const component = computed(() => event.value?.payload.ctx?.component as unknown as string | undefined)
+const http = computed(
+  () => event.value?.payload.ctx?.http as Record<string, unknown> | undefined,
+);
+const ws = computed(
+  () => event.value?.payload.ctx?.ws as Record<string, unknown> | undefined,
+);
+const component = computed(
+  () => event.value?.payload.ctx?.component as unknown as string | undefined,
+);
 
 // Replay deep link: a couple of seconds before the error (§6.1 "Play replay at this moment").
 const replayLink = computed(() =>
-  event.value?.session_id ? `/replay/${event.value.session_id}?t=${event.value.ts - 2000}&project=${pid.value}` : null,
-)
+  event.value?.session_id
+    ? `/replay/${event.value.session_id}?t=${event.value.ts - 2000}&project=${pid.value}`
+    : null,
+);
 
-onMounted(load)
-watch(id, load)
+onMounted(load);
+watch(id, load);
 </script>
 
 <template>
@@ -84,13 +118,18 @@ watch(id, load)
     >
       ← Issues
     </NuxtLink>
-    <p
-      v-if="error"
-      class="mt-4 text-sm text-red-600"
-    >
+    <p v-if="error" class="mt-4 text-sm text-red-600">
       {{ error }}
     </p>
+    <UiSkeleton v-if="!issue && !error" :rows="5" />
     <template v-if="issue">
+      <UiButton
+        v-if="issue.can_delete"
+        class="float-right"
+        variant="danger"
+        @click="deleteOpen = true"
+        >Delete issue</UiButton
+      >
       <div class="mt-2 flex flex-wrap items-start gap-4">
         <div class="min-w-0 flex-1">
           <h1
@@ -113,18 +152,10 @@ watch(id, load)
           />
         </div>
         <dl class="grid grid-cols-4 gap-x-6 text-sm">
-          <dt class="text-gray-500">
-            Events
-          </dt>
-          <dt class="text-gray-500">
-            Users
-          </dt>
-          <dt class="text-gray-500">
-            First seen
-          </dt>
-          <dt class="text-gray-500">
-            Last seen
-          </dt>
+          <dt class="text-gray-500">Events</dt>
+          <dt class="text-gray-500">Users</dt>
+          <dt class="text-gray-500">First seen</dt>
+          <dt class="text-gray-500">Last seen</dt>
           <dd class="font-semibold tabular-nums">
             {{ compact(issue.times_seen) }}
           </dd>
@@ -132,16 +163,16 @@ watch(id, load)
             {{ compact(issue.users_seen) }}
           </dd>
           <dd :title="dateTime(issue.first_seen)">
-            {{ timeAgo(issue.first_seen) }}<span
-              v-if="issue.first_release"
-              class="text-gray-500"
-            > · {{ issue.first_release }}</span>
+            {{ timeAgo(issue.first_seen)
+            }}<span v-if="issue.first_release" class="text-gray-500">
+              · {{ issue.first_release }}</span
+            >
           </dd>
           <dd :title="dateTime(issue.last_seen)">
-            {{ timeAgo(issue.last_seen) }}<span
-              v-if="issue.last_release"
-              class="text-gray-500"
-            > · {{ issue.last_release }}</span>
+            {{ timeAgo(issue.last_seen)
+            }}<span v-if="issue.last_release" class="text-gray-500">
+              · {{ issue.last_release }}</span
+            >
           </dd>
         </dl>
       </div>
@@ -151,18 +182,14 @@ watch(id, load)
           v-for="(n, p) in issue.platform_split"
           :key="p"
           class="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700"
-        >{{ platformLabel(String(p)) }}: {{ compact(n) }}</span>
+          >{{ platformLabel(String(p)) }}: {{ compact(n) }}</span
+        >
       </div>
 
-      <section
-        v-if="event"
-        class="mt-6 grid gap-6 lg:grid-cols-3"
-      >
+      <section v-if="event" class="mt-6 grid gap-6 lg:grid-cols-3">
         <div class="lg:col-span-2">
-          <div class="mb-3 flex items-center gap-3 text-sm">
-            <h2 class="font-semibold">
-              Event
-            </h2>
+          <div class="mb-3 flex flex-wrap items-center gap-3 text-sm">
+            <h2 class="font-semibold">Event</h2>
             <span class="text-gray-500">{{ dateTime(event.ts) }}</span>
             <button
               class="rounded border border-gray-300 bg-white px-2 py-0.5 disabled:opacity-40"
@@ -187,25 +214,27 @@ watch(id, load)
               ▶ Play replay at this moment
             </NuxtLink>
           </div>
-          <p class="mb-3 rounded bg-gray-100 px-3 py-2 font-mono text-sm break-words">
-            {{ event.payload.type ? `${event.payload.type}: ` : '' }}{{ event.payload.message }}
+          <p
+            class="mb-3 rounded bg-gray-100 px-3 py-2 font-mono text-sm break-words"
+          >
+            {{ event.payload.type ? `${event.payload.type}: ` : ""
+            }}{{ event.payload.message }}
           </p>
           <div
             v-if="http"
             class="mb-3 rounded border border-gray-200 bg-white px-3 py-2 font-mono text-xs"
           >
-            {{ http.method }} {{ http.url }} → {{ http.status }} <span class="text-gray-500">({{ http.ms }} ms)</span>
+            {{ http.method }} {{ http.url }} → {{ http.status }}
+            <span class="text-gray-500">({{ http.ms }} ms)</span>
           </div>
           <div
             v-if="ws"
             class="mb-3 rounded border border-gray-200 bg-white px-3 py-2 font-mono text-xs"
           >
-            {{ ws.url }} closed with code {{ ws.code }} after {{ ws.reconnects ?? 0 }} reconnects
+            {{ ws.url }} closed with code {{ ws.code }} after
+            {{ ws.reconnects ?? 0 }} reconnects
           </div>
-          <p
-            v-if="component"
-            class="mb-3 text-xs text-gray-600"
-          >
+          <p v-if="component" class="mb-3 text-xs text-gray-600">
             Component: <code>{{ component }}</code>
           </p>
           <StackTrace
@@ -213,18 +242,22 @@ watch(id, load)
             :raw="event.payload.stack"
           />
 
-          <h2 class="mt-6 mb-2 font-semibold">
-            Breadcrumbs
-          </h2>
-          <ol class="divide-y divide-gray-100 rounded border border-gray-200 bg-white text-xs">
+          <h2 class="mt-6 mb-2 font-semibold">Breadcrumbs</h2>
+          <ol
+            class="divide-y divide-gray-100 rounded border border-gray-200 bg-white text-xs"
+          >
             <li
               v-for="(b, i) in [...(event.payload.breadcrumbs ?? [])].reverse()"
               :key="i"
-              class="flex gap-3 px-3 py-1.5"
+              class="breadcrumb-entry"
             >
               <span class="w-16 shrink-0 text-gray-500">{{ b.cat }}</span>
               <span class="flex-1 break-all">{{ b.msg }}</span>
-              <span class="shrink-0 text-gray-400">{{ b.ts > 1e12 ? new Date(b.ts).toLocaleTimeString('en-GB') : `${b.ts} ms` }}</span>
+              <span class="shrink-0 text-gray-400">{{
+                b.ts > 1e12
+                  ? new Date(b.ts).toLocaleTimeString("en-GB")
+                  : `${b.ts} ms`
+              }}</span>
             </li>
             <li
               v-if="!event.payload.breadcrumbs?.length"
@@ -235,16 +268,10 @@ watch(id, load)
           </ol>
         </div>
         <aside>
-          <h2 class="mb-2 font-semibold">
-            Tags
-          </h2>
-          <dl class="divide-y divide-gray-100 rounded border border-gray-200 bg-white text-xs">
-            <div
-              v-for="[k, v] in tags"
-              :key="k"
-              class="flex gap-3 px-3 py-1.5"
-            >
-              <dt class="w-24 shrink-0 text-gray-500">
+          <h2 class="mb-2 font-semibold">Tags</h2>
+          <dl class="tag-chips">
+            <div v-for="[k, v] in tags" :key="k">
+              <dt>
                 {{ k }}
               </dt>
               <dd class="break-all">
@@ -255,5 +282,13 @@ watch(id, load)
         </aside>
       </section>
     </template>
+    <UiConfirmDialog
+      v-model="deleteOpen"
+      title="Delete issue?"
+      description="This permanently removes the issue and its stored events. New occurrences can create a new issue."
+      action="Delete issue"
+      :busy="deleting"
+      @confirm="remove"
+    />
   </div>
 </template>

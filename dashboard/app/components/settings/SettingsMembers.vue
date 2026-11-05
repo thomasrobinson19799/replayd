@@ -1,62 +1,93 @@
 <script setup lang="ts">
-import type { Project } from '~/utils/types'
-
-interface Member { id: number, email: string, name: string | null, role: string }
-interface User { id: number, email: string }
-const props = defineProps<{ project: Project }>()
-const api = useApi()
-const session = useSessionStore()
-const members = ref<Member[]>([])
-const users = ref<User[]>([])
-const add = reactive({ user: 0, role: 'member' })
-const error = ref('')
+import type { Project } from "~/utils/types";
+interface Member {
+  id: number;
+  email: string;
+  name: string | null;
+  role: string;
+}
+const props = defineProps<{ project: Project }>();
+const api = useApi();
+const toast = useToast();
+const session = useSessionStore();
+const members = ref<Member[]>([]);
+const loading = ref(true);
+const busy = ref(false);
+const form = reactive({ email: "", role: "member" });
+const error = ref("");
+const pending = ref<Member | null>(null);
+const confirm = ref(false);
 async function load() {
   try {
-    members.value = (await api.get<{ members: Member[] }>(`/projects/${props.project.id}/members`)).members
-    if (session.isSuperadmin) users.value = (await api.get<{ users: User[] }>('/users')).users
-  }
-  catch (e) {
-    error.value = errorMessage(e)
+    members.value = (
+      await api.get<{ members: Member[] }>(
+        `/projects/${props.project.id}/members`,
+      )
+    ).members;
+  } catch (e) {
+    error.value = errorMessage(e);
+  } finally {
+    loading.value = false;
   }
 }
-async function setRole(uid: number, role: string) {
+async function mutate(action: () => Promise<unknown>) {
+  if (busy.value) return;
+  busy.value = true;
+  error.value = "";
   try {
-    await api.request(`/projects/${props.project.id}/members/${uid}`, { method: 'PUT', body: { role } })
-    await load()
-  }
-  catch (e) {
-    error.value = errorMessage(e)
-  }
-}
-async function remove(uid: number) {
-  try {
-    await api.del(`/projects/${props.project.id}/members/${uid}`)
-    await load()
-  }
-  catch (e) {
-    error.value = errorMessage(e)
+    await action();
+    await load();
+    await session.fetchMe();
+    toast.show("Project access updated.");
+    confirm.value = false;
+  } catch (e) {
+    error.value = errorMessage(e);
+  } finally {
+    busy.value = false;
   }
 }
-onMounted(load)
+async function add() {
+  await mutate(() =>
+    api.post(`/projects/${props.project.id}/members`, { ...form }),
+  );
+  if (!error.value) form.email = "";
+}
+onMounted(load);
 </script>
-
 <template>
-  <div class="text-sm">
-    <table class="w-full">
-      <tbody>
-        <tr
-          v-for="m in members"
-          :key="m.id"
-          class="border-b border-gray-100"
-        >
-          <td class="py-1">
-            {{ m.email }}
-          </td>
+  <div class="stack">
+    <div>
+      <h2>Project members</h2>
+      <p class="muted mt-1">
+        Admins manage settings. Members triage issues. Viewers cannot see
+        network bodies or WebSocket frame contents.
+      </p>
+    </div>
+    <p v-if="error" role="alert" class="field-error">{{ error }}</p>
+    <UiSkeleton v-if="loading" /><UiDataTable
+      v-else
+      label="Project members"
+      :columns="[
+        { key: 'user', label: 'User' },
+        { key: 'role', label: 'Project role' },
+        { key: 'actions', label: 'Actions' },
+      ]"
+      ><tbody>
+        <tr v-for="m in members" :key="m.id" data-row>
+          <td>{{ m.email }}</td>
           <td>
             <select
               :value="m.role"
-              class="rounded border border-gray-300 px-1"
-              @change="setRole(m.id, ($event.target as HTMLSelectElement).value)"
+              :aria-label="`Role for ${m.email}`"
+              :disabled="busy"
+              @change="
+                mutate(() =>
+                  api.request(`/projects/${project.id}/members/${m.id}`, {
+                    method: 'PUT',
+                    body: { role: ($event.target as HTMLSelectElement).value },
+                  }),
+                )
+              "
             >
               <option
                 v-for="r in ['admin', 'member', 'viewer']"
@@ -67,64 +98,52 @@ onMounted(load)
               </option>
             </select>
           </td>
-          <td class="text-right">
-            <button
-              class="text-red-600 hover:underline"
-              @click="remove(m.id)"
+          <td>
+            <UiButton
+              variant="danger"
+              :disabled="busy"
+              @click="
+                pending = m;
+                confirm = true;
+              "
+              >Remove</UiButton
             >
-              Remove
-            </button>
           </td>
         </tr>
-      </tbody>
-    </table>
-    <form
-      v-if="users.length"
-      class="mt-3 flex gap-2"
-      @submit.prevent="setRole(add.user, add.role)"
+        <tr v-if="!members.length">
+          <td colspan="3">No project members. Superadmins retain access.</td>
+        </tr>
+      </tbody></UiDataTable
     >
-      <select
-        v-model.number="add.user"
-        class="rounded border border-gray-300 px-1"
-      >
-        <option
-          :value="0"
-          disabled
-        >
-          Add user…
-        </option>
-        <option
-          v-for="u in users.filter((u) => !members.some((m) => m.id === u.id))"
-          :key="u.id"
-          :value="u.id"
-        >
-          {{ u.email }}
-        </option>
-      </select>
-      <select
-        v-model="add.role"
-        class="rounded border border-gray-300 px-1"
-      >
-        <option
-          v-for="r in ['admin', 'member', 'viewer']"
-          :key="r"
-          :value="r"
-        >
+    <form class="form-grid" @submit.prevent="add">
+      <UiInput
+        v-model="form.email"
+        type="email"
+        label="Existing user's email"
+        required
+      /><UiSelect v-model="form.role" label="Project role"
+        ><option v-for="r in ['admin', 'member', 'viewer']" :key="r" :value="r">
           {{ r }}
-        </option>
-      </select>
-      <button
-        class="rounded bg-gray-900 px-3 py-1 text-white disabled:opacity-50"
-        :disabled="!add.user"
+        </option></UiSelect
       >
-        Add
-      </button>
+      <div>
+        <UiButton type="submit" variant="primary" :busy="busy"
+          >Add member</UiButton
+        >
+      </div>
     </form>
-    <p
-      v-if="error"
-      class="mt-2 text-red-600"
-    >
-      {{ error }}
+    <p class="muted text-sm">
+      A superadmin can create new accounts from Users.
     </p>
+    <UiConfirmDialog
+      v-model="confirm"
+      title="Remove project access?"
+      :description="`${pending?.email} will lose this project's membership. Superadmins retain workspace access.`"
+      action="Remove member"
+      :busy="busy"
+      @confirm="
+        mutate(() => api.del(`/projects/${project.id}/members/${pending?.id}`))
+      "
+    />
   </div>
 </template>

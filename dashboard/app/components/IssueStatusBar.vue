@@ -10,8 +10,23 @@ const api = useApi()
 const busy = ref(false)
 const err = ref('')
 const open = ref(false)
+const customOpen = ref(false)
+const customKind = ref('date')
+const customDate = ref('')
+const customCount = ref('10')
+const customError = ref('')
+async function customIgnore() {
+  customError.value = ''
+  const until = new Date(customDate.value).getTime()
+  const count = Number(customCount.value)
+  if (customKind.value === 'date' && (!Number.isFinite(until) || until <= Date.now())) { customError.value = 'Choose a future date and time.'; return }
+  if (customKind.value === 'count' && (!Number.isInteger(count) || count < 1 || count > 1000000000)) { customError.value = 'Enter a whole number between 1 and 1,000,000,000.'; return }
+  await apply(customKind.value === 'date' ? { status: 'ignored', ignore_until: until } : { status: 'ignored', ignore_count: count })
+  if (!err.value) customOpen.value = false
+}
 
 async function apply(change: StatusChange) {
+  if (busy.value) return
   busy.value = true
   err.value = ''
   open.value = false
@@ -62,6 +77,8 @@ const text = computed(() => statusText(props.issue, dateTime))
             class="rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50 disabled:opacity-50"
             :disabled="busy"
             data-testid="action-ignore"
+            :aria-expanded="open"
+            @keydown.esc="open = false"
             @click="open = !open"
           >
             Ignore ▾
@@ -79,6 +96,7 @@ const text = computed(() => statusText(props.issue, dateTime))
             >
               {{ a.label }}
             </button>
+            <button class="block w-full px-3 py-2 text-left hover:bg-gray-50" @click="open = false; customOpen = true">Custom date or event count…</button>
           </div>
         </div>
       </template>
@@ -96,5 +114,6 @@ const text = computed(() => statusText(props.issue, dateTime))
       v-if="err"
       class="text-red-600"
     >{{ err }}</span>
+    <UiModal v-model="customOpen" title="Ignore issue"><form class="stack" @submit.prevent="customIgnore"><UiSelect v-model="customKind" label="Ignore until"><option value="date">A date and time</option><option value="count">More events arrive</option></UiSelect><UiInput v-if="customKind === 'date'" v-model="customDate" label="Date and time (local)" type="datetime-local" required /><UiInput v-else v-model="customCount" label="Additional events" type="number" min="1" max="1000000000" required /><p v-if="customError || err" role="alert" class="field-error">{{ customError || err }}</p><UiButton type="submit" variant="primary" :busy="busy">Ignore issue</UiButton></form></UiModal>
   </div>
 </template>
