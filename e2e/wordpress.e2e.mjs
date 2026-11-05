@@ -5,6 +5,8 @@
 import { chromium } from 'playwright';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { login, serve } from './lib.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -30,6 +32,7 @@ wp('option', 'update', 'replayd_wp', JSON.stringify({ enabled: '1', dsn: project
 
 const browser = await chromium.launch();
 const checks = {};
+const rocketChecks = {};
 try {
   const page = await (await browser.newContext()).newPage();
   await page.goto(`${WP}/`);
@@ -58,12 +61,49 @@ try {
     if (!s) await new Promise((r) => setTimeout(r, 1000));
   }
   checks.replay_recorded = !!s && s.segments >= 1 && s.release === 'wp-1.0.0';
-  console.log(JSON.stringify({ checks, head: head.slice(0, 2), session: s && { segments: s.segments, errors: s.error_count } }));
+  const rocket = resolve(process.env.WPROCKET_DIR || `${root}data/wp-rocket`);
+  if (existsSync(`${rocket}/inc/Engine/Optimization/DelayJS/HTML.php`)) {
+    // Exercise the actual plugin's exclusions against WP Rocket's public DelayJS implementation.
+    // This is local compatibility evidence, not a claim that staging has been deployed.
+    const fixtureDir = `${root}data/wp-compat`;
+    mkdirSync(fixtureDir, { recursive: true });
+    const html = await (await fetch(`${WP}/`)).text();
+    writeFileSync(`${fixtureDir}/page.html`, html);
+    const exclusions = JSON.parse(wp('eval', 'echo json_encode(apply_filters("rocket_delay_js_exclusions", []));'));
+    for (const excluded of [false, true]) {
+      const transformed = execFileSync('docker', ['run', '--rm', '--entrypoint', 'php',
+        '-v', `${root}:/repo:ro`, '-v', `${rocket}:/wpr:ro`, 'wordpress:cli-php8.3',
+        '/repo/sdk/bench/spikes/t04/delayjs-harness.php', '/wpr', '/repo/data/wp-compat/page.html',
+        ...(excluded ? exclusions : [])], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
+      writeFileSync(`${fixtureDir}/${excluded ? 'excluded' : 'default'}.html`, transformed);
+      const pageName = `replayd-delay-${excluded ? 'excluded' : 'default'}.html`;
+      compose('cp', `${fixtureDir}/${excluded ? 'excluded' : 'default'}.html`, `wp:/var/www/html/${pageName}`);
+      const context = await browser.newContext();
+      const delayed = await context.newPage();
+      // Use a real local HTTP response: synthetic route.fulfill loses the response's
+      // loopback classification in current Chrome and blocks cross-origin local SDKs.
+      await delayed.goto(`${WP}/${pageName}`);
+      await delayed.waitForTimeout(2000);
+      const before = await delayed.evaluate(() => ({ sdk: !!window.Replayd, delayed: document.querySelectorAll('script[type="text/rocketlazyloadscript"]').length, sdkDelayed: document.getElementById('replayd-js')?.type === 'text/rocketlazyloadscript' }));
+      rocketChecks[excluded ? 'sdk_excluded_before_interaction' : 'negative_control_sdk_delayed'] = excluded ? before.sdk : !before.sdk;
+      if (excluded) {
+        rocketChecks.sdk_tag_preserved = !before.sdkDelayed;
+        rocketChecks.other_scripts_delayed = before.delayed > 0;
+        await delayed.mouse.move(100, 100);
+        await delayed.keyboard.press('Tab');
+        await delayed.waitForTimeout(2000);
+        rocketChecks.delayed_scripts_released = await delayed.evaluate(() => document.querySelectorAll('script[type="text/rocketlazyloadscript"]').length === 0);
+      }
+      await context.close();
+    }
+  }
+  console.log(JSON.stringify({ checks, rocketChecks, script_ids: head.slice(0, 2).map(x => x.id), session: s && { segments: s.segments, errors: s.error_count } }));
 } finally {
   await browser.close();
   sdk.server.close();
   if (!process.env.KEEP) compose('down', '-v');
 }
-const pass = Object.values(checks).every(Boolean) && Object.keys(checks).length === 5;
+const pass = Object.values(checks).every(Boolean) && Object.keys(checks).length === 5 && Object.values(rocketChecks).every(Boolean);
+if (!Object.keys(rocketChecks).length) console.log('WP Rocket compatibility not run: set WPROCKET_DIR to the public v3.24 source checkout.');
 console.log(JSON.stringify({ test: 'replayd-wp on WordPress 6.8', pass }));
 if (!pass) process.exit(1);
