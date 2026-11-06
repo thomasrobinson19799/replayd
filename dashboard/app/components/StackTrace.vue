@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { Frame } from '~/utils/types'
+import { visibleFrames } from '~/utils/copy-stack'
 
 const props = defineProps<{ frames: Frame[], raw?: string }>()
-const inAppOnly = ref(true)
+const inAppOnly = defineModel<boolean>('inAppOnly', { default: true })
 const showRaw = ref(false)
 
 const hasInApp = computed(() => props.frames.some(f => f.in_app))
 const shown = computed(() =>
-  inAppOnly.value && hasInApp.value ? props.frames.filter(f => f.in_app) : props.frames,
+  visibleFrames(props.frames, inAppOnly.value),
 )
 
 function location(f: Frame): string {

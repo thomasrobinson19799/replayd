@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { IssueDetail, IssueEvent } from "~/utils/types";
+import { copyStack } from "~/utils/copy-stack";
 
 const route = useRoute();
 const api = useApi();
@@ -16,6 +17,8 @@ const deleteOpen = ref(false);
 const olderBusy = ref(false);
 const eventError = ref("");
 const breadcrumbSearch = ref("");
+const inAppOnly = ref(true);
+const stackText = computed(() => event.value ? copyStack(event.value, inAppOnly.value) : "");
 const shareUrl = computed(() => typeof window === "undefined" ? route.fullPath : `${window.location.origin}${route.fullPath}`);
 const breadcrumbs = computed(() => [...(event.value?.payload.breadcrumbs ?? [])].reverse().filter(b => `${b.cat} ${b.msg}`.toLowerCase().includes(breadcrumbSearch.value.toLowerCase())));
 let request = 0;
@@ -154,7 +157,7 @@ watch(id, load);
       </header>
       <div class="issue-workflow">
         <IssueStatusBar :issue="issue" :can-change="issue.can_change_status" @updated="u => issue && Object.assign(issue, u)" />
-        <div class="flex flex-wrap gap-2"><UiCopyButton :text="shareUrl" label="Copy link" /><UiButton v-if="issue.can_delete" variant="danger" @click="deleteOpen = true">Delete issue</UiButton></div>
+        <div class="flex flex-wrap gap-2"><UiCopyButton v-if="event" :text="stackText" label="Copy stack" /><UiCopyButton :text="shareUrl" label="Copy link" /><UiButton v-if="issue.can_delete" variant="danger" @click="deleteOpen = true">Delete issue</UiButton></div>
       </div>
       <div class="issue-columns">
         <section v-if="event" class="issue-evidence" aria-label="Event details">
@@ -180,7 +183,7 @@ watch(id, load);
               <p v-if="http" class="code-block mb-4">{{ http.method }} {{ http.url }} → {{ http.status }} ({{ http.ms }} ms)</p>
               <p v-if="ws" class="code-block mb-4">{{ ws.url }} closed with code {{ ws.code }} after {{ ws.reconnects ?? 0 }} reconnects</p>
               <p v-if="component" class="muted text-xs mb-3">Component: <code>{{ component }}</code></p>
-              <StackTrace :frames="event.payload.frames ?? []" :raw="event.payload.stack" />
+              <StackTrace v-model:in-app-only="inAppOnly" :frames="event.payload.frames ?? []" :raw="event.payload.stack" />
             </div>
           </details>
           <details class="evidence-section" open>
