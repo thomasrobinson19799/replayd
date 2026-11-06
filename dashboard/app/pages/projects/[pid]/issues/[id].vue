@@ -132,7 +132,7 @@ watch(id, load);
 <template>
   <div class="issue-detail">
   <!-- THESIS: an evidence-first triage workspace, following the owner's Sentry reference.
-       OWN-WORLD: plum navigation, violet actions, restrained neutral surfaces, compact controls.
+       OWN-WORLD: semantic dark/light surfaces, indigo actions, compact controls.
        STORY: identify impact, resolve or ignore, inspect an event, jump into its recording.
        FIRST VIEWPORT: issue and impact above actions; stack left, issue context right.
        FORM: owner-selected developer-tool convention; preserve real data and access controls. -->
@@ -143,7 +143,7 @@ watch(id, load);
     <template v-if="issue">
       <header class="issue-header">
         <div class="min-w-0">
-          <div class="issue-label"><UiBadge :tone="issue.level">{{ issue.level }}</UiBadge><span>{{ issue.source }} · Issue #{{ issue.id }}</span></div>
+          <div class="issue-label"><UiBadge :tone="issue.level">{{ issue.level }}</UiBadge><span class="font-mono tabular-nums">{{ issue.source }} · Issue #{{ issue.id }}</span></div>
           <h1 data-testid="issue-title">{{ issue.title }}</h1>
           <p class="muted break-words">{{ issue.culprit || 'No culprit recorded' }}</p>
         </div>

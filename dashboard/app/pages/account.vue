@@ -41,7 +41,7 @@ async function save() {
         <p>Your identity and sign-in security.</p>
       </div>
     </header>
-    <UiCard class="mb-6"
+    <UiCard class="mb-2"
       ><div class="section-heading">
         <h2>{{ session.me?.name || "Your account" }}</h2>
         <UiBadge>{{
@@ -51,7 +51,7 @@ async function save() {
       <p>{{ session.me?.email }}</p></UiCard
     ><UiCard
       ><h2>Change password</h2>
-      <p class="muted mt-2 mb-6">
+      <p class="muted mt-2 mb-2">
         Your current session stays signed in. All other sessions will be signed
         out.
       </p>

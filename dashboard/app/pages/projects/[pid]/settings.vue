@@ -83,7 +83,7 @@ watch(pid, load);
     <h1 class="text-2xl font-semibold">
       Settings — {{ project?.name ?? pid }}
     </h1>
-    <p class="muted mt-2 mb-6">
+    <p class="muted mt-2 mb-2">
       Manage capture, access, and alerts for this project.
     </p>
     <UiTabs
@@ -100,7 +100,7 @@ watch(pid, load);
     <div
       v-if="project"
       :key="`${pid}-${tab}`"
-      class="settings-panel mt-6 max-w-3xl"
+      class="settings-panel mt-2 max-w-3xl"
       role="tabpanel"
       :aria-label="labels[tab]"
     >

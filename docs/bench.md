@@ -390,3 +390,7 @@ reported separately from the desktop initialization gate. WebSocket gate: 3.175 
 at 4× in the local orchestrator check, below 5 µs. SDK lint, 140 unit tests plus four gate
 tests, and all size checks pass: core 6.90 KB, IIFE 6.96 KB, replay 25.57 KB, worker 2.76 KB.
 The source-map, error and server ingest code did not change. Live acceptance is owner-run (D-34).
+
+## UI-06 visual restyle — 2026-11-06
+
+Final generated dashboard JS/CSS gzip artifacts total **194,437 bytes**; main CSS is **9.39 kB gzip** in the Vite report. Measured from dashboard/.output/public after pnpm build. No new dependencies, fonts or JavaScript behavior; seven changed Vue script blocks match HEAD. SDK/server performance budgets and benchmark gates are unchanged; no claim of remeasured ingestion or replay timing.

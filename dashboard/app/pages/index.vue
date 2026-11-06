@@ -88,7 +88,7 @@ onMounted(load);
         >New project</UiButton
       >
     </header>
-    <ProjectSetup v-if="created" :project="created" class="mb-6"
+    <ProjectSetup v-if="created" :project="created" class="mb-2"
       ><div class="flex gap-3">
         <UiButton @click="created = null">I've saved the token</UiButton
         ><NuxtLink
@@ -99,7 +99,7 @@ onMounted(load);
       </div></ProjectSetup
     >
     <p v-if="error" role="alert" class="field-error mb-4">{{ error }}</p>
-    <div class="mb-6 max-w-sm">
+    <div class="mb-2 max-w-sm">
       <UiInput
         v-model="search"
         label="Find a project"
@@ -117,7 +117,7 @@ onMounted(load);
                 p.name
               }}</NuxtLink>
             </h2>
-            <p class="muted text-xs mt-1">{{ p.slug }}</p>
+            <p class="muted text-xs mt-1 font-mono tabular-nums">{{ p.slug }}</p>
           </div>
           <UiBadge>{{ p.role }}</UiBadge>
         </div>
@@ -144,7 +144,7 @@ onMounted(load);
           </div>
           <ActivitySparkline :buckets="stats[p.id]!.buckets"
         /></template>
-        <p v-else-if="statsErrors.has(p.id)" class="muted py-8">
+        <p v-else-if="statsErrors.has(p.id)" class="muted py-10">
           Activity unavailable. Refresh to retry.
         </p>
         <UiSkeleton v-else :rows="2" />

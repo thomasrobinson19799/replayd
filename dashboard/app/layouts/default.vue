@@ -180,7 +180,7 @@ watch(
     </div>
     <div v-else class="login-shell">
       <slot /><UiButton
-        class="fixed right-6 top-6"
+        class="fixed right-4 top-4"
         :aria-label="`Theme: ${theme}`"
         @click="cycleTheme"
         >Theme: {{ theme }}</UiButton

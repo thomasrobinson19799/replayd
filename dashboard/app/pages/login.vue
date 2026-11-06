@@ -31,7 +31,7 @@ async function submit() {
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">▸▸</span>replayd
     </div>
-    <h1 class="mb-6 text-xl font-semibold">Sign in to replayd</h1>
+    <h1 class="mb-2 text-xl font-semibold">Sign in to replayd</h1>
     <p class="muted">
       Find the error. Replay the moment. Get back to building.
     </p>

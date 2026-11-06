@@ -1,121 +1,142 @@
 ---
-name: replayd
-description: An evidence-first developer triage workspace with plum navigation and violet actions.
+name: "replayd"
+description: "A compact evidence-first developer workspace with paired neutral themes and indigo actions."
 colors:
-  accent: "#6941b5"
-  accent-soft: "#eee7fb"
-  canvas: "#f7f6f9"
-  surface: "#ffffff"
-  surface-soft: "#f0edf5"
-  ink: "#302739"
-  muted: "#665b75"
-  line: "#d9d3e2"
-  control-border: "#8b7d98"
-  danger: "#b42335"
-  success: "#19633e"
-  warning: "#805400"
-  dark-accent: "#c6a9ff"
-  dark-accent-soft: "#3c2b54"
-  dark-canvas: "#19151f"
-  dark-surface: "#221c2a"
-  dark-surface-soft: "#302639"
-  dark-ink: "#f2edf7"
-  dark-muted: "#c1b4ce"
-  dark-line: "#50425e"
-  dark-control-border: "#8f7b9e"
-  dark-danger: "#ff9aab"
-  dark-success: "#8ddbb1"
-  dark-warning: "#efc274"
-  sidebar-surface: "#2b2338"
-  sidebar-surface-soft: "#3e314f"
-  sidebar-ink: "#faf7ff"
-  sidebar-muted: "#cfc2df"
-  sidebar-line: "#665574"
-  sidebar-accent: "#d3bbff"
-  sidebar-accent-soft: "#493560"
+  background: "#0d1017"
+  card: "#151a23"
+  muted: "#1e2531"
+  muted-foreground: "#929eaf"
+  border: "#29313e"
+  foreground: "#edf1f7"
+  primary: "#a5b4fc"
+  success: "#4cdbad"
+  destructive: "#fa8292"
+  warning: "#e8b967"
+  accent: "#6366f1"
+  on-solid: "#ffffff"
+  negative-button: "#be123c"
+  light-background: "#eef1f6"
+  light-card: "#ffffff"
+  light-muted: "#f2f4f8"
+  light-muted-foreground: "#626f83"
+  light-border: "#e2e6ee"
+  light-foreground: "#182338"
+  light-primary: "#4f46e5"
+  light-success: "#087d5a"
+  light-destructive: "#c13d54"
+  light-warning: "#98600c"
 typography:
   headline:
-    fontFamily: '"Segoe UI", "Helvetica Neue", sans-serif'
-    fontSize: "26px"
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "20px"
     fontWeight: 650
-    lineHeight: 1.25
-    letterSpacing: "-0.025em"
+    lineHeight: 1.4
+    letterSpacing: "-0.02em"
   title:
-    fontFamily: '"Segoe UI", "Helvetica Neue", sans-serif'
-    fontSize: "17px"
-    fontWeight: 650
-  body:
-    fontFamily: '"Segoe UI", "Helvetica Neue", sans-serif'
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
     fontSize: "14px"
-    lineHeight: 1.55
-  label:
-    fontFamily: '"Segoe UI", "Helvetica Neue", sans-serif'
+    fontWeight: 650
+    lineHeight: 1.4
+    letterSpacing: "-0.02em"
+  brand:
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
     fontSize: "13px"
-    fontWeight: 550
+    fontWeight: 650
+    letterSpacing: "-0.02em"
+  body:
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.5
+  label:
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "12px"
+    fontWeight: 500
+  table:
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "12px"
+    fontWeight: 400
+  table-header:
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "11px"
+    fontWeight: 500
+  hint:
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "11px"
+    fontWeight: 400
+    lineHeight: 1.5
+  stat:
+    fontFamily: "ui-monospace, \"SFMono-Regular\", Consolas, monospace"
+    fontSize: "20px"
+    fontWeight: 600
+  eyebrow:
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "10px"
+    fontWeight: 600
+    letterSpacing: "0.1em"
 rounded:
-  badge: "4px"
+  inline: "4px"
   control: "6px"
   panel: "8px"
-  card: "7px"
-  settings: "10px"
+  navigation: "10px"
   dialog: "12px"
 spacing:
-  field-gap: "6px"
-  compact: "8px"
-  control-gap: "12px"
-  form-gap: "16px"
-  card-gap: "20px"
-  card-padding: "22px"
-  panel-padding: "24px"
-  workspace: "32px"
+  space-1: "4px"
+  space-1-5: "6px"
+  space-2: "8px"
+  space-2-5: "10px"
+  space-3: "12px"
+  space-3-5: "14px"
+  space-4: "16px"
+  space-5: "20px"
 components:
   button-primary:
     backgroundColor: "{colors.accent}"
-    textColor: "{colors.surface}"
+    textColor: "{colors.on-solid}"
     rounded: "{rounded.control}"
-    padding: "7px 12px"
+    padding: "6px 12px"
   button-secondary:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.foreground}"
     rounded: "{rounded.control}"
-    padding: "7px 12px"
+    padding: "6px 12px"
   button-danger:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.danger}"
+    backgroundColor: "{colors.negative-button}"
+    textColor: "{colors.on-solid}"
     rounded: "{rounded.control}"
-    padding: "7px 12px"
+    padding: "6px 12px"
   button-ghost:
     backgroundColor: "transparent"
-    textColor: "{colors.ink}"
+    textColor: "{colors.muted-foreground}"
     rounded: "{rounded.control}"
-    padding: "7px 12px"
+    padding: "6px 12px"
   input:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.control}"
-    padding: "8px 10px"
+    backgroundColor: "{colors.background}"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.panel}"
+    padding: "10px 12px"
   navigation-active:
-    backgroundColor: "{colors.sidebar-accent-soft}"
-    textColor: "{colors.sidebar-ink}"
+    textColor: "{colors.primary}"
     rounded: "{rounded.control}"
     padding: "10px 12px"
   badge:
-    backgroundColor: "{colors.surface-soft}"
-    textColor: "{colors.muted}"
-    rounded: "{rounded.badge}"
+    backgroundColor: "{colors.muted}"
+    textColor: "{colors.muted-foreground}"
+    rounded: "{rounded.control}"
     padding: "2px 8px"
   card:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.card}"
-    padding: "22px"
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.panel}"
+    padding: "16px"
   tabs:
-    textColor: "{colors.muted}"
-    padding: "12px"
+    textColor: "{colors.muted-foreground}"
+    padding: "10px 12px"
   evidence-section:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.card}"
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.panel}"
+    padding: "12px"
 ---
 
 # Design System: replayd
@@ -124,131 +145,94 @@ components:
 
 **Creative North Star: "Evidence-first developer triage"**
 
-replayd is a compact, calm workbench for following recorded evidence. Permanent plum navigation anchors neutral surfaces, violet actions and restrained severity colors. Familiar Sentry-like sidebar navigation, project cards, tables and grouped evidence panels express the owner's chosen developer-tool conventions.
+replayd is a compact workbench for inspecting recorded errors and sessions. Cool neutral surfaces, indigo actions and explicit severity colors keep dense evidence readable. The owner-supplied compact design system replaces the former plum palette while retaining the familiar navigation, content hierarchy and interaction patterns.
 
-The interface introduces the issue and its impact before resolution controls, then leads into event evidence and replay. A persistent workspace frame establishes location; evidence occupies the main column while a separate rail carries issue context. Settings, account and standalone error screens share the same typography, controls and theme behavior. The visual authority is the built dashboard, especially `dashboard/app/assets/css/main.css`, its shared UI components and layout; product purpose is recorded in `PRODUCT.md`.
+The built source of truth is `dashboard/app/assets/css/main.css`, with Vue shared controls and the existing icon paths. Nuxt 4, Vue 3 and Tailwind 4 remain in place. System fonts and semantic tokens carry the same visual language through projects, triage, replay, settings, account and error screens.
 
 **Key Characteristics:**
 
-- Compact, readable information density.
-- Plum navigation and neutral surfaces with subtle borders.
-- Violet actions and explicit semantic severity.
-- Evidence first, with progressively disclosed detail and a separate context rail.
-- System typography and conventional controls.
-- Equivalent light and dark themes.
+- Compact spacing and clear data hierarchy.
+- Paired dark and light palettes with semantic severity.
+- System sans text and monospace identifiers and measured values.
+- Bordered surfaces with restrained elevation.
+- Native controls, visible focus and reduced-motion support.
 
 ## Colors
 
-### Primary
+Cool neutral surfaces frame one indigo action color and explicit semantic states. The frontmatter's unprefixed palette is dark; `light-` entries map the corresponding roles in light mode.
 
-**Workbench violet** (`accent`) identifies primary actions, selected tabs and activity traces. **Pale violet** (`accent-soft`) supports selection and the event-to-replay prompt without overwhelming their text. Their dark counterparts keep the same meaning with a lighter accent and deeper selected surface.
+**Primary.** Accent supplies solid primary buttons and the brand mark. Primary supplies links, focus and selected navigation. Selection uses a restrained tint of primary (9%).
 
-### Neutral
+**Neutral.** Background is the page and input surface; card is the panel, header and dropdown surface; muted supports hover and quiet fills. Foreground and muted-foreground carry primary and secondary text. Border separates surfaces; soft dividers use it at 65%, and table hover uses muted at 60%.
 
-**Neutral canvas** is the application background. **Surface** holds cards, forms and dialogs. **Soft surface** distinguishes headers, quiet fills and hover states. **Ink** carries primary text; **muted** carries supporting text; **line** separates adjacent content. Frontmatter keys prefixed with `dark-` are the corresponding values selected by the root theme attribute, not an additional accent palette.
+**Semantic.** Success, destructive and warning retain their meaning across themes. Badges use tone text with 15% tone backgrounds. Toast borders use the corresponding tone at 40%. Neutral badges pair muted with muted-foreground.
 
-**Control border** gives editable inputs, selects and textareas a stronger visible boundary in each theme. Keep this role separate from the subtle `line` token used for decorative dividers. Invalid fields retain the danger border.
+**The Paired Theme Rule.** Change foreground, surface and border roles together. Primary action fill and white action text stay identical in both themes; links, focus and selection use the theme-specific primary color.
 
-**Permanent plum navigation** uses the `sidebar-` token family in both themes. Its pale text, lavender focus accent and lighter plum selected fill are scoped to navigation. The current destination uses full-contrast sidebar ink and opaque icon strokes, including when a detail route is open.
-
-### Semantic
-
-Danger, success and warning identify error, resolved/successful and caution states. Always accompany severity with readable text or another explicit cue. Error and disabled badges use danger text; neutral badges use muted text on a soft surface.
-
-The sidecar's tonal strips are generated previews for inspecting each color; they do not add application tokens or prescribe additional UI colors.
-
-**The Paired Theme Rule.** Change text, backgrounds and borders together through semantic tokens. Shared primary buttons use white text in light mode and dark canvas text in dark mode; inspect both states rather than assuming a text utility remains readable. The sidebar keeps its own contrasting plum palette in either theme.
+Dark is the CSS fallback. The existing persisted system/light/dark selector still applies `data-theme`; `.light` also selects the light palette. Set `color-scheme` to the resolved theme. Do not change the existing theme preference behavior.
 
 ## Typography
 
-The Segoe UI stack supplies both headings and body copy. It feels familiar and direct, with enough weight distinction for scanning dense records. There is no separate display typeface. Code retains monospace treatment; event messages explicitly use the system monospace stack.
+The system sans stack supplies interface prose and headings; the system mono stack supplies code, identifiers and tabular values. No downloaded font is used. The frontmatter records the implemented roles.
 
-- **Headline:** page heading; the headline token reduces to a compact size (23px) below the mobile breakpoint.
-- **Issue title:** a compact technical heading (24px) that wraps long error text.
-- **Title:** section heading; project names use a slightly larger title (19px).
-- **Body:** default reading and table content.
-- **Label:** field labels; buttons use a stronger weight (600), and hints, badges and supporting metadata use a smaller size (12px).
-- **Measured values:** project statistics use larger numerals (26px), medium weight (600) and tabular figures.
-- **Issue impact:** event and user counts use tabular numerals (28px, reducing to 23px on narrow screens); context-rail headings use compact section text (14px).
+Page titles use the compact headline role (20px); this extends the panel-heading pattern where the supplied specification did not define page titles. Stat values reduce to 19px below 768px. Brand text uses the smaller brand role; panel headings retain weight 650 and tight tracking. Labels and badges are 12px, table headings and hints 11px, and navigation eyebrows 10px with uppercase presentation.
 
-Settings explanations are bounded to a readable measure (70ch). Empty-state descriptions use a shorter measure (50ch). Long technical strings wrap or scroll within their own region instead of widening the page.
+Inputs use 14px text, or 13px in compact filter and replay controls. All inputs, selects and textareas use 16px below 600px. Code text has a 10px floor. Body text is antialiased.
+
+**The Measured Type Rule.** Use monospace with tabular numerals for identifiers, code and aligned measurements. Keep interface prose in the system sans stack.
 
 ## Layout
 
-The desktop frame uses a fixed sidebar (220px), a bordered topbar with breadcrumbs and account actions (minimum height 58px), and a centered workspace (maximum width 1800px). The workspace uses the named workspace padding at its sides and bottom, with a more compact top inset (24px). Page headings place title/context and relevant actions together, wrapping when space becomes constrained.
+The desktop workspace retains a 220px fixed navigation rail and a centered content area capped at 1800px. The header has a 48px minimum height and 16px horizontal padding. Workspace padding is 8px 12px 12px; it becomes 8px 10px 10px below 1200px and 8px below 600px. Adjacent panels use an 8px gap.
 
-At the intermediate breakpoint (1100px), the sidebar narrows (190px) and workspace padding decreases (24px). At the mobile breakpoint (760px), the workspace loses its left offset and uses compact side and bottom padding (16px and 20px respectively), retaining the top inset. A toggle reveals the overlay sidebar (240px); the closed sidebar is hidden from interaction. Forms switch from two columns to one and headings wrap.
+Cards use 16px padding. Panel headings use 12px padding and 8px gaps. Shared form fields stack with a 12px gap, and labels sit 4px above inputs. Stat cells use 14px 16px padding, 8px internal gaps and thin dividers. Empty states use 40px vertical and 24px horizontal padding.
 
-Issue detail places identity and impact above a full-width workflow row. Below it, a flexible evidence column sits beside a context rail (280px, narrowing to 230px at the intermediate breakpoint). At the evidence-stack breakpoint (900px), the rail moves below the evidence into a two-column context grid. At the narrow-evidence breakpoint (600px), the issue header stacks, panel padding tightens, tag values become a single column and breadcrumb timestamps move beneath their message. These rules describe the issue-detail pattern, not every screen.
+At 1199px the rail narrows to 190px. At 767px it becomes a 240px overlay beneath the header; the navigation toggle remains reachable. Forms and evidence columns stack. At 599px mobile field text grows and dense detail rows wrap. These correspond to the Tailwind min-width breakpoints 1200, 768 and 600px.
 
-Project cards use an auto-filling grid with a minimum card width (320px, capped at the available width). Shared form grids use equal columns and the form-gap token. Tables keep their own horizontal and vertical scrolling region (maximum height 70vh), with sticky headings and readable non-wrapping column labels. Do not shrink technical values to avoid scrolling.
+Tables scroll within their bordered container, capped at 70vh; headings stick to the top and button action cells stay reachable at the trailing edge. The replay stage retains the recording's aspect ratio and existing geometry.
 
-Replay workspaces preserve the recording's aspect ratio and fit the stage to its available region. Controls and detail tabs wrap as necessary; recorded breadcrumb entries align time, content and trailing metadata in columns. Filter and search controls remain close to the records they affect.
+**The Bounded Surface Rule.** Keep wide data and long technical strings inside their own scrolling or wrapping regions. Preserve table headings and reachable actions instead of shrinking values.
 
 ## Elevation & Depth
 
-The workbench uses tone and fine borders for everyday separation. Cards and tables are flat. The shared shadow is reserved for dialogs, dropdowns, toasts and the revealed mobile navigation. Light and dark shadow values live in the sidecar because the frontmatter schema has no elevation group. Modal backdrops dim the surrounding task context.
+Thin borders separate ordinary surfaces. Cards add only the small card shadow. Dropdowns, dialogs and open mobile navigation use the larger overlay shadow; toast separation comes from a border. The sidecar records the exact shadow and motion values.
 
-**The Overlay Depth Rule.** Use a shadow to identify a surface above the current task, not to decorate each content card.
+**The Quiet Depth Rule.** Use thin borders to separate surfaces. Keep the small card shadow and reserve the larger shadow for surfaces that sit above the current task.
 
 ## Shapes
 
-Rounded rectangles form a modest hierarchy: compact badges, subtly rounded controls, evidence/card containers, grouped panels and dialogs. Settings panels retain their established larger radius. The frontmatter radius tokens are normative. Borders are thin (1px); decorative boundaries use the semantic line color, while editable fields use the stronger control-border token. Icons accompany labels with clear strokes; selected sidebar navigation preserves full foreground contrast.
+Compact inline controls and count chips use the smallest radius. Buttons and badges use the control radius; inputs, panels and cards use the panel radius. Navigation containers use the navigation radius, while dialogs and large activity summaries use the dialog radius. Status dots and spinners are circular.
+
+Shared icons retain the project's existing SVG paths, currentColor, round caps and joins, with a 16px default size and 1.8 stroke. Selected navigation icons remain opaque.
 
 ## Components
 
-### Buttons
+**Buttons.** Shared and legacy controls share a centered inline layout, 6px gap, weight 600 and 200ms state transitions. Primary is accent with white text; secondary is bordered with foreground text; ghost begins muted and gains foreground on hover. Danger uses the solid negative color with white text. Solid hover opacity is 90%. Disabled opacity is 50% with a not-allowed cursor. Standard padding is 6px 12px; table buttons use 4px 10px and 12px text.
 
-Compact and direct. All four shared variants use a minimum height (36px), compact spacing, strong text (13px, weight 600) and the control radius. Primary is violet; secondary is a bordered surface; danger retains the surface with semantic danger text; ghost removes its resting border and fill. Secondary and ghost hover use the soft surface. Primary hover slightly darkens through brightness (0.93). Busy buttons show a small spinner and disable repeat submission.
+**Fields.** Inputs use background fill, a 1px border, panel radius and 10px 12px padding. Focus has a 2px primary outline at the edge. Invalid fields use a destructive border and associated error text. Native selects retain their browser behavior, with card fill, control radius and 8px 12px padding. Compact fields have a 32px minimum height. Number spinners are hidden.
 
-Focus uses a visible accent outline (2px, offset 3px). Disabled controls use reduced opacity (0.5) with an unavailable cursor. Primary hover brightness changes are brief (120ms); foreground and background theme changes occur together. Loading animation is limited to skeletons and spinners. Reduced-motion preferences remove animations and transitions.
+**Tabs and menus.** Tabs use a bottom divider, 10px 12px padding and a 2px primary active underline; active text is foreground. Counts use compact muted chips. Custom dropdown panels have bounded scrolling, card fill, a border, panel radius and overlay shadow. Menus enter over 120ms with opacity and a small upward offset; the account chevron rotates when open. Native select popups, including their arrows and option layout, remain browser/OS controlled.
 
-### Inputs and fields
+**Cards, badges and tables.** Cards group existing records. Badges pair readable text with semantic tints. Tables use 12px normal text, 11px medium headers, tabular numerals and 8px 10px cell padding. Header height is 32px and ordinary cell height 34px, expanding for content. Borders and hover fills remain subtle.
 
-Inputs, selects and textareas share a surface with the stronger control-border boundary, control radius and minimum height (38px). A visible label sits above each shared field; hint or error text follows it and is programmatically associated. Invalid fields use the danger border and text. Preserve native checkbox and select behavior. Search remains an ordinary focusable input, including the device search in session filtering.
+**Feedback and focus.** Toasts sit at the top right, 8px apart, with 12px 16px padding and a 180ms opacity/vertical entrance. Keyboard focus elsewhere uses a 2px primary outline with 3px offset. Reduced-motion preferences reduce animation and transition durations to near zero. Coarse-pointer controls target 40px, navigation/menu rows 44px, and table cells 44px.
 
-### Navigation and tabs
-
-Sidebar items use pale muted resting text, a lighter plum hover and a selected plum surface with full-contrast text. Breadcrumbs describe the current hierarchy. The account dropdown groups account actions. The theme control cycles system, light and dark; standalone error screens apply the same saved preference or system default. Topbar tooltips appear below the control so they remain inside the viewport; tooltips also appear on keyboard focus.
-
-Tabs use a bottom divider and accent underline for selection. Settings tabs wrap to keep the selected section visible at narrow widths. Only the selected shared tab is in the tab order; arrows, Home and End change selection. The shell includes a skip link, page-search shortcut and discoverable keyboard help.
-
-### Cards, badges and tables
-
-Cards group a complete unit of information using the card token and a thin border. Project cards separate name, measured activity and footer action; activity must come from real project data. Badges provide compact, explicit state labels.
-
-Tables use soft header surfaces, muted strong headings and consistent cell padding (13px vertically, 16px horizontally). Hover and focus-within reveal the current row. Sort controls expose the actual ascending or descending direction. Navigation starts from an explicit link or button; arrow keys and j/k move focus between supported rows. Large datasets remain paginated or virtualized according to their screen, with bounded rendering.
-
-### Dialogs and feedback
-
-Dialogs use the native modal element, labelled titles, an explicit close action, Escape handling and restored focus. Width is bounded (560px or the viewport minus 32px), height is constrained (85vh), and content scrolls. Action groups sit at the end of the form.
-
-Toasts sit at the lower-right edge and use inverted ink/surface colors. Empty states state the absence of records and, where available, a meaningful next action. Skeletons indicate pending content without inventing records. Replay controls, errors and recording gaps continue the same surface and typography language.
-
-### Issue evidence and workflow
-
-Event details group the timestamp, previous/next event controls, recorded context and a clear replay action. Native disclosure sections organize stack trace and breadcrumbs; both begin open, with clear open/closed indicators. The adjacent rail separates issue dates, platform counts and tags from the event evidence. Labels and counts always reflect retained data.
-
-Resolve, Ignore and reopen controls follow the issue's actual state and permissions. Ignore opens a bounded, scrollable option group; at the mobile breakpoint it enters document flow beneath the trigger rather than extending beyond the viewport. Escape restores focus to its trigger; clicking outside dismisses it. Custom date or event-count choices use the shared modal and validation patterns. Deletion remains an explicit confirmed action.
-
-**The Evidence and Context Rule.** Establish issue identity and impact before workflow actions, then keep event evidence distinct from issue-level context. Use progressive disclosure to organize recorded detail without inventing unsupported features.
+**Evidence and replay.** Native disclosures, the context rail, timeline markers and inspection tabs keep their existing behavior. Virtualized replay rows remain at their existing 24px geometry; meeting the larger touch-row target would require a separate behavior change. The replay iframe retains its white underlying canvas so recorded content is not recolored by the dashboard theme.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- Do reuse semantic tokens and shared controls across triage, replay, settings and account screens.
-- Do inspect text, borders, icons and surfaces together in both themes.
-- Do preserve readable table values with local scrolling and persistent headings.
-- Do keep keyboard focus visible and actions reachable through native controls.
-- Do use actual recorded activity and explicit loading, empty and error states.
-- Do preserve the owner's Sentry-like conventions while exposing only replayd's real capabilities and permissions.
-- Do check desktop, intermediate and mobile layouts with real pointer and keyboard interactions.
+- Do reuse the central tokens and existing shared controls.
+- Do inspect text, icons and their backgrounds together in both themes.
+- Do preserve visible keyboard focus and test real pointer interactions.
+- Do keep tables locally scrollable and technical identifiers readable.
+- Do keep all displayed records, permissions and behaviors tied to the existing application.
 
 ### Don't:
 
-- Don't introduce a new accent or display font for a single screen.
-- Don't apply content-card shadows as general decoration.
-- Don't leave an offscreen navigation panel focusable when closed.
-- Don't hardcode sample business records into the interface.
-- Don't treat clipped controls, stale sort indicators or unreachable actions as design conventions.
+- Don't add fonts, UI libraries or a replacement component framework for styling.
+- Don't hardcode a separate palette or font stack for an individual page.
+- Don't change routes, copy, API calls or data handling to make a visual change.
+- Don't increase virtualized row height with CSS alone; its geometry is controlled by existing code.
+
