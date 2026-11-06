@@ -13,6 +13,7 @@ export interface NetworkItem {
   url: string
   status: number
   duration: number
+  type?: 'fetch' | 'xhr'
   detail: Record<string, unknown>
 }
 export interface ErrorItem { ts: number, level: string, title: string, issueId?: number }
@@ -52,8 +53,8 @@ export function collect(events: RrEvent[], p: Panels): void {
         break
       }
       case 'network': {
-        const { method, url, status, duration, ...rest } = d
-        p.network.push({ ts: typeof d.start === 'number' ? d.start : ts, method: str(method), url: str(url), status: Number(status ?? 0), duration: Number(duration ?? 0), detail: rest })
+        const { method, url, status, duration, type, ...rest } = d
+        p.network.push({ ts: typeof d.start === 'number' ? d.start : ts, method: str(method), url: str(url), status: Number(status ?? 0), duration: Number(duration ?? 0), type: type === 'fetch' || type === 'xhr' ? type : undefined, detail: rest })
         break
       }
       case 'error': {
@@ -135,6 +136,19 @@ export function clock(ms: number): string {
   const m = Math.floor((s % 3600) / 60)
   const sec = String(s % 60).padStart(2, '0')
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
+}
+
+export interface NetworkFilter { method?: string, status?: string, type?: string, slower?: number, q?: string, failed?: boolean }
+export function networkFilter(items: NetworkItem[], f: NetworkFilter): NetworkItem[] {
+  const q = f.q?.trim().toLowerCase()
+  return items.filter(it =>
+    (!f.method || it.method.toUpperCase() === f.method) &&
+    (!f.status || (f.status === 'failed' ? it.status === 0 : Math.floor(it.status / 100) === Number(f.status))) &&
+    (!f.type || it.type === f.type) &&
+    (!f.slower || it.duration > f.slower) &&
+    (!f.failed || it.status === 0 || it.status >= 400) &&
+    (!q || `${it.method} ${it.url} ${it.status}`.toLowerCase().includes(q)),
+  )
 }
 
 /**

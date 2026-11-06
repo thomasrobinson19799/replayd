@@ -8,6 +8,7 @@ import {
   collect,
   emptyPanels,
   lastAtOrBefore,
+  networkFilter,
   prettyFrame,
   sortPanels,
   wsChannels,
@@ -38,6 +39,12 @@ const skipInactive = ref(true);
 const follow = ref(true);
 const panelSearch = ref("");
 const failedOnly = ref(false);
+const netFilters = reactive({ method: '', status: '', type: '', slower: '' });
+const netMethods = computed(() => {
+  void panelsVersion.value;
+  return [...new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', ...panels.value.network.map(n => n.method.toUpperCase())])];
+});
+function clearNetworkFilters() { Object.assign(netFilters, { method: '', status: '', type: '', slower: '' }); }
 const networkSel = ref<NetworkItem | null>(null);
 const detailOpen = ref(false);
 const preview = ref("");
@@ -323,11 +330,7 @@ const lists = computed(() => {
     console: p.console.filter(
       (x) => !q || `${x.level} ${x.text}`.toLowerCase().includes(q),
     ),
-    network: p.network.filter(
-      (x) =>
-        (!failedOnly.value || x.status >= 400 || x.status === 0) &&
-        (!q || `${x.method} ${x.url} ${x.status}`.toLowerCase().includes(q)),
-    ),
+    network: networkFilter(p.network, { ...netFilters, slower: Number(netFilters.slower), q, failed: failedOnly.value }),
     errors: p.errors.filter((x) => !q || x.title.toLowerCase().includes(q)),
     crumbs: p.crumbs.filter(
       (x) => !q || `${x.cat} ${x.msg}`.toLowerCase().includes(q),
@@ -634,6 +637,13 @@ onBeforeUnmount(() => {
             ><input v-model="failedOnly" type="checkbox" >Failed only</label
           >
         </div>
+          <div v-if="tab === 'network'" class="network-filters">
+            <UiSelect v-model="netFilters.method" label="Method"><option value="">All methods</option><option v-for="method in netMethods" :key="method" :value="method">{{ method }}</option></UiSelect>
+            <UiSelect v-model="netFilters.status" label="Status"><option value="">All statuses</option><option v-for="s in [2, 3, 4, 5]" :key="s" :value="String(s)">{{ s }}xx</option><option value="failed">Failed — no response</option></UiSelect>
+            <UiSelect v-model="netFilters.type" label="Type"><option value="">All types</option><option value="fetch">fetch</option><option value="xhr">XHR</option></UiSelect>
+            <UiSelect v-model="netFilters.slower" label="Slower than"><option value="">Any duration</option><option value="500">500 ms</option><option value="1000">1 s</option><option value="3000">3 s</option><option value="5000">5 s</option></UiSelect>
+            <UiButton @click="clearNetworkFilters">Clear filters</UiButton>
+          </div>
         <div class="min-h-0 flex-1" role="tabpanel" :aria-label="tab">
           <VirtualList
             v-if="tab === 'console'"

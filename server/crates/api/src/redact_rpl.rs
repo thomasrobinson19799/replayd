@@ -160,7 +160,7 @@ mod tests {
     pub fn sample() -> Vec<u8> {
         let events = json!([
             {"type": 2, "timestamp": 1, "data": {"node": {"id": 1}}},
-            {"type": 5, "timestamp": 2, "data": {"tag": "network", "payload": {"method": "POST", "url": "https://api/x", "status": 200,
+            {"type": 5, "timestamp": 2, "data": {"tag": "network", "payload": {"method": "POST", "type": "xhr", "url": "https://api/x", "status": 200,
                 "reqHeaders": {"content-type": "application/json"}, "reqBody": "{\"pin\":\"[Filtered]\",\"amount\":5}",
                 "resHeaders": {"x": "y"}, "resBody": "{\"balance\":12345.67}"}}},
             {"type": 5, "timestamp": 3, "data": {"tag": "ws", "payload": {"k": "frame", "id": 1, "dir": "in", "raw": "{\"push\":{\"channel\":\"orders:10023451\"}}"}}},
@@ -224,6 +224,7 @@ mod tests {
             } else {
                 let v: Value = serde_json::from_str(&json).unwrap();
                 assert_eq!(v[1]["data"]["payload"]["status"], 200);
+                assert_eq!(v[1]["data"]["payload"]["type"], "xhr");
                 assert_eq!(v[2]["data"]["payload"]["len"], 38); // length of the raw frame
                 assert_eq!(v[3]["data"]["payload"]["args"][0], "hi");
             }

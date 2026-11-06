@@ -55,7 +55,7 @@ const read = async (r: Response, cap: number) => {
 };
 
 const fetched = (m: string, u: string, r: Response, ts: number, t0: number, n: RequestInit | undefined, rq: Request | 0) => {
-  const ms = since(t0), x: X = {}, h = r.headers, cl = h.get('content-length');
+  const ms = since(t0), x: X = { type: 'fetch' }, h = r.headers, cl = h.get('content-length');
   if (cl) x.resSize = +cl;
   if (req(x, u, n?.body, () => new Headers(n?.headers ?? (rq ? rq.headers : undefined)) as never)) {
     x.resHeaders = rHeaders(h as never);
@@ -85,7 +85,7 @@ type XHR = XMLHttpRequest & { [K]?: XR } & Record<string, any>;
 const xdone = (x: XHR) => {
   const r = x[K]!;
   if (own(r.u)) return;
-  const ms = since(r.t), z: X = {}, cl = x.getResponseHeader('content-length');
+  const ms = since(r.t), z: X = { type: 'xhr' }, cl = x.getResponseHeader('content-length');
   if (cl) z.resSize = +cl;
   if (req(z, r.u, r.b, () => r.h)) {
     z.resHeaders = rHeaders(x.getAllResponseHeaders().trim().split(/[\r\n]+/).map((l) => l.split(/: (.*)/)) as never);
@@ -112,7 +112,7 @@ export const httpHooks = () => {
     if (!own(u))
       p.then(
         (r) => fetched(m, u, r, ts, t0, n, rq),
-        () => net(m, u, 0, ts, since(t0)),
+        () => net(m, u, 0, ts, since(t0), { type: 'fetch' }),
       ).catch(err);
   });
   const B = W.CapacitorWebXMLHttpRequest;

@@ -59,7 +59,7 @@ describe('fetch', () => {
     expect(await r.json()).toEqual({ access_token: 't', v: 1 });
     await vi.waitFor(async () => expect((await import('../src/ring')).crumbs.some((c) => c.cat === 'http')).toBe(true));
     const [n] = await nets();
-    expect(n).toMatchObject({ method: 'POST', url: 'https://api.example/api/ok?token=[Filtered]&s=1', status: 200, reqSize: 5 });
+    expect(n).toMatchObject({ type: 'fetch', method: 'POST', url: 'https://api.example/api/ok?token=[Filtered]&s=1', status: 200, reqSize: 5 });
     expect(typeof n!.start).toBe('number');
     expect(typeof n!.duration).toBe('number');
     expect(n).not.toHaveProperty('reqHeaders');
@@ -96,6 +96,7 @@ describe('fetch', () => {
     for (const p of ['/api/sse', '/api/bin', '/api/big', '/api/huge']) await (await fetch(p)).text();
     await vi.waitFor(async () => expect((await import('../src/ring')).crumbs.filter((c) => c.cat === 'http')).toHaveLength(4));
     const ns = await nets();
+    expect(ns.every(n => n.type === 'fetch')).toBe(true);
     const by = Object.fromEntries(ns.map((n) => [new URL(n.url as string).pathname, n]));
     expect(by['/api/sse']!.resBody).toBeUndefined();
     expect(by['/api/bin']!.resBody).toBeUndefined();
@@ -194,6 +195,7 @@ describe('XHR (prototype patch, CapacitorHttp off / web)', () => {
     await xhr(X, 'GET', '/api/fail');
     await xhr(X, 'GET', 'https://other.example/x?signature=s');
     const ns = await nets();
+    expect(ns.every(n => n.type === 'xhr')).toBe(true);
     expect(ns.map((n) => [n.method, n.status])).toEqual([
       ['POST', 200],
       ['GET', 500],
