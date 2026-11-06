@@ -108,3 +108,24 @@ informed hierarchy and grouping; no unsupported Sentry capabilities or fabricate
 These gates remain open; local source checks and emulation are not deployment or hardware proof.
 Canvas stays excluded from v1. The latest working branch is `codex/ui-05-sentry-triage`; all changes
 remain local, with no push or production deployment.
+
+### Final code completion and owner handoff (2026-11-06)
+
+The owner subsequently took responsibility for live tests (D-34). The historical external
+gates above now have `owner-validation` status; they are not unfinished repository code.
+The Sentry-style dashboard is complete. No UI changes were needed in this final pass.
+
+Final local image rebuild and all 12 integration suites pass, including WordPress with
+actual WP Rocket. Issue visibility is 3,939 ms; progressive 60-minute replay first-frame
+median is 631 ms (maximum 653 ms). Dashboard lint/typecheck, 26 tests and build pass;
+the dashboard bundle remains 199,200 B gzip (177,769 B before the overhaul).
+
+The recorder snapshot gate now passes locally at a three-run median of 144.00 ms at 4×
+and 21.36 ms at 1×, with unchanged budgets and masking. SDK lint, 140 unit tests,
+4 benchmark-gate tests and bundle limits pass. The final implementation also replaces
+the no-op benchmark entry point, adds missing CI coverage, produces an installable
+WordPress ZIP, and supplies daily database backups with isolated restore verification.
+
+See [owner-run acceptance](owner-acceptance.md) for the unperformed live checks and
+[the README](../README.md) for setup and packaging. Current cumulative local branch:
+`codex/t-53-release-checks`. No push or production deployment.

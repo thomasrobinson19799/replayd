@@ -32,27 +32,27 @@
   {
     "suite": "adapters",
     "exit": 0,
-    "seconds": 35
+    "seconds": 36
   },
   {
     "suite": "player",
     "exit": 0,
-    "seconds": 46
+    "seconds": 47
   },
   {
     "suite": "alerts",
     "exit": 0,
-    "seconds": 20
+    "seconds": 18
   },
   {
     "suite": "observability",
     "exit": 0,
-    "seconds": 35
+    "seconds": 27
   },
   {
     "suite": "wordpress",
     "exit": 0,
-    "seconds": 63
+    "seconds": 67
   },
   {
     "suite": "dashboard",

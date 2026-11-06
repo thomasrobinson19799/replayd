@@ -8,4 +8,4 @@ The dashboard is an English Nuxt 4 SPA with Tailwind 4 and Pinia. It uses the ex
 
 The owner explicitly requests sidebar navigation, project cards with measured activity, shared form/table/dialog primitives, and polished developer-tool conventions. On 2026-11-06 the owner selected a familiar Sentry-like workspace and delegated the remaining design choices: plum navigation, violet actions, compact evidence panels, progressive disclosure, and a separate issue-context rail. Use real recorded data and replayd's existing permissions; do not imply unsupported Sentry features.
 
-Recheck external blockers when resources become available, and distinguish source verification from staging, deployment and physical-device acceptance. No production deployment or push.
+Repository implementation is complete. Under D-34, the owner performs live staging, deployment and physical-device acceptance; those checks are recorded in docs/owner-acceptance.md. Distinguish local verification from live acceptance and do not mark unperformed checks passed. No production deployment or push.
