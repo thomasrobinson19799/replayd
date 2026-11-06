@@ -1864,6 +1864,7 @@ dependencies = [
  "bytes",
  "metrics",
  "parking_lot",
+ "regex",
  "replayd-common",
  "replayd-db",
  "serde",

@@ -179,6 +179,35 @@ pub fn process_job(sh: &Shared, job: &EventJob) -> Vec<Processed> {
     let rules = sh.rules_for(job.project_id);
     let out: Vec<Processed> = events
         .into_iter()
+        .filter(|e| {
+            if let Some(id) = e.id.as_deref().and_then(|id| uuid::Uuid::parse_str(id).ok())
+                && !sh
+                    .event_ids
+                    .lock()
+                    .insert(id.as_u64_pair().0 ^ id.as_u64_pair().1)
+            {
+                metrics::counter!("replayd_events_rejected_total", "reason" => "duplicate").increment(1);
+                return false;
+            }
+            true
+        })
+        .filter(|e| {
+            let source = e.source.as_deref().unwrap_or("manual");
+            let url = e
+                .ctx
+                .as_ref()
+                .and_then(|ctx| ctx.get(if source == "ws" { "ws" } else { "http" }))
+                .and_then(|ctx| ctx.get("url"))
+                .and_then(|u| u.as_str())
+                .unwrap_or("");
+            !sh.projects.ignores.matches(
+                job.project_id,
+                source,
+                e.message.as_deref().unwrap_or(""),
+                url,
+                job.received_ms as i64,
+            )
+        })
         .map(|e| {
             event::process_with(
                 e,
@@ -190,16 +219,6 @@ pub fn process_job(sh: &Shared, job: &EventJob) -> Vec<Processed> {
             )
         })
         .collect();
-    let mut ids = sh.event_ids.lock();
-    let before = out.len();
-    let out: Vec<Processed> = out
-        .into_iter()
-        .filter(|p| ids.insert(p.id.as_u64_pair().0 ^ p.id.as_u64_pair().1))
-        .collect();
-    if out.len() < before {
-        metrics::counter!("replayd_events_rejected_total", "reason" => "duplicate")
-            .increment((before - out.len()) as u64);
-    }
     out
 }
 

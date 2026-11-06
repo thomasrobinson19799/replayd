@@ -524,6 +524,145 @@ async fn rbac_matrix_over_http() {
     assert_eq!(audit_count, 5, "only creation and revocation are audited");
     std::fs::remove_dir_all(&data_dir).ok();
 
+    // T-62: only project admins / superadmins can manage ignore rules.
+    let ignore_path = format!("/api/projects/{pid}/ignore-rules");
+    let rule = json!({"kind":"error","match_type":"contains","pattern":"Noise"});
+    let mut rule_ids = Vec::new();
+    for (i, session) in sessions.iter().enumerate() {
+        let expected = if i < 2 {
+            S::OK
+        } else if i < 4 {
+            S::FORBIDDEN
+        } else {
+            S::NOT_FOUND
+        };
+        assert_eq!(
+            call(&app, Some(session), Method::GET, &ignore_path, None, true)
+                .await
+                .0,
+            expected
+        );
+        let (code, body) = call(
+            &app,
+            Some(session),
+            Method::POST,
+            &ignore_path,
+            Some(rule.clone()),
+            true,
+        )
+        .await;
+        assert_eq!(code, expected);
+        if i < 2 {
+            rule_ids.push(body["id"].as_i64().unwrap());
+        }
+    }
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[1]),
+            Method::POST,
+            &ignore_path,
+            Some(rule.clone()),
+            false
+        )
+        .await
+        .0,
+        S::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[1]),
+            Method::POST,
+            &ignore_path,
+            Some(json!({"kind":"error","match_type":"regex","pattern":"["})),
+            true
+        )
+        .await
+        .0,
+        S::BAD_REQUEST
+    );
+    let edit_path = format!("{ignore_path}/{}", rule_ids[0]);
+    for i in [2, 3, 4] {
+        let expected = if i == 4 { S::NOT_FOUND } else { S::FORBIDDEN };
+        assert_eq!(
+            call(
+                &app,
+                Some(&sessions[i]),
+                Method::PUT,
+                &edit_path,
+                Some(rule.clone()),
+                true
+            )
+            .await
+            .0,
+            expected
+        );
+        assert_eq!(
+            call(&app, Some(&sessions[i]), Method::DELETE, &edit_path, None, true)
+                .await
+                .0,
+            expected
+        );
+    }
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[1]),
+            Method::PUT,
+            &edit_path,
+            Some(json!({"kind":"network","match_type":"regex","pattern":"^wss:"})),
+            true
+        )
+        .await
+        .0,
+        S::OK
+    );
+    // Fill near the cap; concurrent creations still cannot exceed 50.
+    c.execute("INSERT INTO ignore_rules (project_id,kind,match_type,pattern) SELECT $1,'error','contains','x' FROM generate_series(1,47)", &[&pid]).await.unwrap();
+    let (a, b) = tokio::join!(
+        call(
+            &app,
+            Some(&sessions[1]),
+            Method::POST,
+            &ignore_path,
+            Some(rule.clone()),
+            true
+        ),
+        call(
+            &app,
+            Some(&sessions[0]),
+            Method::POST,
+            &ignore_path,
+            Some(rule.clone()),
+            true
+        )
+    );
+    assert!((a.0 == S::OK && b.0 == S::BAD_REQUEST) || (b.0 == S::OK && a.0 == S::BAD_REQUEST));
+    assert_eq!(
+        c.query_one("SELECT count(*) FROM ignore_rules WHERE project_id=$1", &[&pid])
+            .await
+            .unwrap()
+            .get::<_, i64>(0),
+        50
+    );
+    assert_eq!(
+        call(&app, Some(&sessions[1]), Method::DELETE, &edit_path, None, true)
+            .await
+            .0,
+        S::NO_CONTENT
+    );
+    assert_eq!(
+        c.query_one(
+            "SELECT count(*) FROM audit_log WHERE action LIKE 'ignore_rule.%' AND data->>'project_id'=$1",
+            &[&pid.to_string()]
+        )
+        .await
+        .unwrap()
+        .get::<_, i64>(0),
+        5
+    );
+
     // bad status → 400
     let (code, _) = call(
         &app,

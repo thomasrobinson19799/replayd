@@ -67,6 +67,7 @@ fn fnv1a(b: &[u8]) -> u64 {
 
 #[derive(Default)]
 pub struct ProjectCache {
+    pub ignores: crate::ignore::IgnoreCache,
     /// Keyed by numeric id (as text) and by slug.
     map: RwLock<Arc<HashMap<String, Arc<Project>>>>,
 }
@@ -99,6 +100,7 @@ impl ProjectCache {
     }
 
     pub async fn reload(&self, pool: &Pool) -> Result<usize, replayd_db::DbError> {
+        self.ignores.reload(pool).await?;
         let c = pool.get().await?;
         let rows = replayd_db::load_projects(&c).await?;
         let n = rows.len();

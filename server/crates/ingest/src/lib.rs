@@ -6,6 +6,7 @@
 //! payloads are never decompressed (AGENTS.md rule 5).
 
 pub mod client_ip;
+pub mod ignore;
 pub mod projects;
 pub mod ratelimit;
 

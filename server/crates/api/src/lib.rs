@@ -2,6 +2,7 @@
 
 pub mod auth;
 pub mod error;
+pub mod ignore_rules;
 pub mod issues;
 pub mod projects;
 pub mod rbac;
@@ -169,6 +170,14 @@ pub fn router(st: Arc<ApiState>) -> Router {
                 .delete(projects::delete),
         )
         .route("/api/projects/{pid}/keys/rotate", post(projects::rotate_key))
+        .route(
+            "/api/projects/{pid}/ignore-rules",
+            get(ignore_rules::list).post(ignore_rules::create),
+        )
+        .route(
+            "/api/projects/{pid}/ignore-rules/{id}",
+            put(ignore_rules::update).delete(ignore_rules::delete),
+        )
         .route("/api/projects/{pid}/telegram/test", post(projects::telegram_test))
         .route(
             "/api/projects/{pid}/members",

@@ -206,3 +206,117 @@ fn decode_rejects_bombs_and_garbage() {
     e.write_all(b"]").unwrap();
     assert!(worker::decode_body(&e.finish().unwrap()).is_none());
 }
+
+#[tokio::test]
+async fn ignore_rules_drop_only_new_issue_events_and_flush_counters() {
+    let Some(pool) = replayd_db::test_pool() else {
+        return;
+    };
+    let c = pool.get().await.unwrap();
+    replayd_db::ensure_partitions(&c, 1, 7).await.unwrap();
+    let slug = format!("it-ignore-{}", uuid::Uuid::now_v7());
+    let pid: i32 = c.query_one("INSERT INTO projects (slug,name,public_key,upload_token_hash) VALUES ($1,'Ignore test','pk','\\x00') RETURNING id", &[&slug]).await.unwrap().get(0);
+    let projects = Arc::new(ProjectCache::default());
+    projects.reload(&pool).await.unwrap();
+    let (tx, mut rx) = mpsc::channel(64);
+    let sh = worker::Shared::new(pool.clone(), projects.clone(), Some(tx));
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+    let make = || {
+        let mut events = vec![];
+        for source in [
+            "onerror",
+            "unhandledrejection",
+            "vue",
+            "react",
+            "manual",
+            "console",
+            "http",
+            "ws",
+        ] {
+            for word in ["NOISE", "^exact$"] {
+                let ctx = if source == "ws" {
+                    json!({"ws":{"url":format!("wss://example/{word}")}})
+                } else {
+                    json!({"http":{"url":format!("https://example/{word}")}})
+                };
+                events.push(json!({"id":uuid::Uuid::now_v7().to_string(),"ts":now,"source":source,"message":word,"level":"error","ctx":ctx}));
+            }
+        }
+        EventJob {
+            project_id: pid,
+            received_ms: now,
+            body: gz(&json!(events)),
+            user_agent: None,
+        }
+    };
+    let mut before = worker::process_job(&sh, &make());
+    assert_eq!(before.len(), 16);
+    worker::flush(&sh, &mut before).await.unwrap();
+    while rx.try_recv().is_ok() {}
+    let counts = c
+        .query_one(
+            "SELECT count(*),sum(times_seen)::bigint FROM issues WHERE project_id=$1",
+            &[&pid],
+        )
+        .await
+        .unwrap();
+    let baseline: (i64, i64) = (counts.get(0), counts.get(1));
+    for kind in ["error", "console", "network"] {
+        for (mode, pattern) in [("contains", "noise"), ("regex", r"\^exact\$$")] {
+            c.execute(
+                "INSERT INTO ignore_rules (project_id,kind,match_type,pattern) VALUES ($1,$2,$3,$4)",
+                &[&pid, &kind, &mode, &pattern],
+            )
+            .await
+            .unwrap();
+        }
+    }
+    projects.ignores.reload(&pool).await.unwrap();
+    let job = make();
+    let mut ignored = worker::process_job(&sh, &job);
+    assert!(
+        worker::process_job(&sh, &job).is_empty(),
+        "retry does not inflate dropped counters"
+    );
+    assert!(ignored.is_empty());
+    assert_eq!(worker::flush(&sh, &mut ignored).await.unwrap(), 0);
+    assert!(rx.try_recv().is_err(), "no alert signals");
+    let counts = c
+        .query_one(
+            "SELECT count(*),sum(times_seen)::bigint FROM issues WHERE project_id=$1",
+            &[&pid],
+        )
+        .await
+        .unwrap();
+    assert_eq!((counts.get::<_, i64>(0), counts.get::<_, i64>(1)), baseline);
+    projects.ignores.reload(&pool).await.unwrap();
+    let counts = c
+        .query_one(
+            "SELECT sum(dropped_count)::bigint,count(last_matched_at) FROM ignore_rules WHERE project_id=$1",
+            &[&pid],
+        )
+        .await
+        .unwrap();
+    assert_eq!(counts.get::<_, i64>(0), 16);
+    assert_eq!(counts.get::<_, i64>(1), 6);
+    // Reload preserves counters, edits apply immediately, historical events remain intact.
+    projects.ignores.reload(&pool).await.unwrap();
+    c.execute("DELETE FROM ignore_rules WHERE project_id=$1", &[&pid])
+        .await
+        .unwrap();
+    projects.ignores.reload(&pool).await.unwrap();
+    assert_eq!(worker::process_job(&sh, &make()).len(), 16);
+    assert_eq!(
+        c.query_one("SELECT count(*) FROM events WHERE project_id=$1", &[&pid])
+            .await
+            .unwrap()
+            .get::<_, i64>(0),
+        16
+    );
+    c.execute("DELETE FROM events WHERE project_id=$1", &[&pid])
+        .await
+        .unwrap();
+    c.execute("DELETE FROM projects WHERE id=$1", &[&pid])
+        .await
+        .unwrap();
+}

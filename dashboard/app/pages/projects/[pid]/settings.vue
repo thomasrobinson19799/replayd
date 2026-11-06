@@ -5,6 +5,7 @@ import type { Project } from "~/utils/types";
 const route = useRoute();
 const router = useRouter();
 const api = useApi();
+const session = useSessionStore();
 const pid = computed(() => String(route.params.pid));
 const project = ref<Project | null>(null);
 const error = ref("");
@@ -51,6 +52,7 @@ const tabs = [
   "telegram",
   "remote",
   "rules",
+  "ignore",
 ] as const;
 type Tab = (typeof tabs)[number];
 const labels: Record<Tab, string> = {
@@ -60,6 +62,7 @@ const labels: Record<Tab, string> = {
   telegram: "Telegram",
   remote: "Remote config",
   rules: "Fingerprint rules",
+  ignore: "Ignore rules",
 };
 const tab = computed<Tab>(() =>
   (tabs as readonly string[]).includes(String(route.query.tab))
@@ -89,7 +92,7 @@ watch(pid, load);
     <UiTabs
       class="settings-tabs"
       :model-value="tab"
-      :items="tabs.map((t) => ({ value: t, label: labels[t] }))"
+      :items="tabs.filter(t => t !== 'ignore' || project?.role === 'admin' || session.isSuperadmin).map((t) => ({ value: t, label: labels[t] }))"
       label="Project settings"
       @update:model-value="router.push({ query: { tab: $event } })"
     />
@@ -130,6 +133,7 @@ watch(pid, load);
         :project="project"
         @saved="(p) => (project = p)"
       />
+      <SettingsIgnoreRules v-else-if="tab === 'ignore' && (project.role === 'admin' || session.isSuperadmin)" :project="project" />
     </div>
     <UiSkeleton v-else-if="!error" :rows="4" />
     <UiConfirmDialog

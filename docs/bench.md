@@ -412,3 +412,13 @@ throughput or physical-device measurements is made.
 
 SDK remains core **6.90 KB**, IIFE **6.96 KB**, replay **25.57 KB**, worker **2.76 KB**;
 adapter sizes 302/436/416 B. No SDK code or budget changes in these two tasks.
+
+## T-62 ignore rules — 2026-11-06
+
+Windows native Rust debug build, 50 cached contains rules × 10,000 nonmatching
+events: **310,587 μs total**, about **31.1 μs/event**. Reproduce with
+`cargo test -p replayd-ingest fifty_rule_matching_measurement -- --nocapture`.
+This is a local debug-build observation, not a production throughput assertion
+or a new budget. Matching does not query Postgres; cache refresh indexes existing
+rules by ID and only writes counters that changed. SDK and replay-ingest paths
+are unchanged.
