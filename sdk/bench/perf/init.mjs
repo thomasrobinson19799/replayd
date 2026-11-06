@@ -2,17 +2,18 @@
 // and first-use costs are included. The page is cross-origin isolated (COOP/COEP) for 5 µs timer resolution.
 // Usage: pnpm --filter @replayd/bench run bench:init     env: SAMPLES=15 RATES=1,4 NO_BUILD=1
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { startServer } from '../server.mjs';
 
 const SAMPLES = Number(process.env.SAMPLES ?? 15), RATES = (process.env.RATES ?? '1,4').split(',').map(Number);
-const sdkRoot = new URL('../../', import.meta.url).pathname;
-const dist = new URL('../../packages/core/dist/', import.meta.url).pathname;
+const sdkRoot = fileURLToPath(new URL('../../', import.meta.url));
+const dist = fileURLToPath(new URL('../../packages/core/dist/', import.meta.url));
 if (!process.env.NO_BUILD) execSync('pnpm --filter @replayd/core run build', { cwd: sdkRoot, stdio: 'inherit' });
 
 const { server, port } = await startServer(0);
-const browser = await chromium.launch();
+const browser = await chromium.launch({channel:process.env.PLAYWRIGHT_CHANNEL || undefined});
 for (const rate of RATES) {
   const ts = [];
   for (let i = 0; i < SAMPLES; i++) {
@@ -39,6 +40,7 @@ for (const rate of RATES) {
   ts.sort((a, b) => a - b);
   const q = (p) => ts[Math.min(ts.length - 1, Math.floor(p * ts.length))].toFixed(3);
   console.log(`init() cold @ ${rate}× CPU: median ${q(0.5)} ms  p90 ${q(0.9)} ms  min ${ts[0].toFixed(3)} ms  (n=${SAMPLES})`);
+  if(rate === 1 && !(Number(q(0.5)) < 1)) process.exitCode = 1;
 }
 await browser.close();
 server.close();

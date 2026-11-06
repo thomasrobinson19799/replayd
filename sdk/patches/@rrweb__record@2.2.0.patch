@@ -1,5 +1,5 @@
 diff --git a/dist/record.js b/dist/record.js
-index c94b22e39bc3adb0b18f37e19b91be00d611f169..922a8be81fa27b6e187f09b0cc1b323731043f73 100644
+index c94b22e39bc3adb0b18f37e19b91be00d611f169..d25abbf053e67efb8b854274bbd66de6349207a0 100644
 --- a/dist/record.js
 +++ b/dist/record.js
 @@ -90,13 +90,13 @@ const testableAccessors = {
@@ -18,6 +18,27 @@ index c94b22e39bc3adb0b18f37e19b91be00d611f169..922a8be81fa27b6e187f09b0cc1b3237
    MutationObserver: ["constructor"]
  };
  const untaintedBasePrototype = {};
+@@ -1011,9 +1011,8 @@ function serializeNode(n, options) {
+   }
+ }
+ function getRootId(doc, mirror2) {
+-  if (!mirror2.hasNode(doc)) return void 0;
+   const docId = mirror2.getId(doc);
+-  return docId === 1 ? void 0 : docId;
++  return docId === -1 || docId === 1 ? void 0 : docId;
+ }
+ function serializeTextNode(n, options) {
+   const { needsMask, maskTextFn, rootId, cssCaptured } = options;
+@@ -1357,7 +1356,8 @@ function serializeNodeWithId(n, options) {
+   } else {
+     id = genId();
+   }
+-  const serializedNode = Object.assign(_serializedNode, { id });
++  const serializedNode = _serializedNode;
++  serializedNode.id = id;
+   mirror2.add(n, serializedNode);
+   if (id === IGNORED_NODE) {
+     return null;
 @@ -1937,6 +1937,10 @@ class MutationBuffer {
      __publicField(this, "processedNodeManager");
      __publicField(this, "unattachedDoc");
@@ -37,7 +58,15 @@ index c94b22e39bc3adb0b18f37e19b91be00d611f169..922a8be81fa27b6e187f09b0cc1b3237
  const mutationBuffers = /* @__PURE__ */ new Set();
  function getEventTarget(event) {
    try {
-@@ -5069,6 +5074,9 @@ record.takeFullSnapshot = (isCheckout) => {
+@@ -4803,6 +4808,7 @@ function record(options = {}) {
+       recordCanvas,
+       inlineImages,
+       onSerialize: (n) => {
++        if (n.nodeType !== 1) return;
+         if (isSerializedIframe(n, mirror)) {
+           iframeManager.addIframe(n);
+         }
+@@ -5069,6 +5075,9 @@ record.takeFullSnapshot = (isCheckout) => {
    takeFullSnapshot(isCheckout);
  };
  record.mirror = mirror;

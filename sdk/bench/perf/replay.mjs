@@ -19,6 +19,7 @@ import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { chromium } from 'playwright';
 import { startServer } from '../server.mjs';
+import { replayFailures } from './budgets.mjs';
 
 const RATES = (process.env.RATES ?? '4,1').split(',').map(Number);
 const SECONDS = Number(process.env.SECONDS ?? 15);
@@ -70,9 +71,10 @@ const med = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
 /** sums top-level FunctionCall time per script on the main thread, bucketed into 500 ms windows */
 function analyse(trace, from, to) {
   const ev = JSON.parse(trace).traceEvents;
-  const main = ev.find((e) => e.name === 'thread_name' && e.args?.name === 'CrRendererMain' && ev.some((x) => x.pid === e.pid && x.name === 'FunctionCall' && /\/pages\/terminal/.test(x.args?.data?.url ?? '')));
+  const main = ev.find(e => e.name === 'replayd-bench-anchor');
+  if (!main) throw new Error('Benchmark clock anchor is missing');
   const calls = ev.filter((e) => e.ph === 'X' && e.pid === main.pid && e.tid === main.tid && e.name === 'FunctionCall').sort((a, b) => a.ts - b.ts || b.dur - a.dur);
-  const nav = ev.find((e) => e.name === 'navigationStart' && e.pid === main.pid)?.ts ?? calls[0].ts;
+  const nav = main.ts - from * 1000;
   const kind = (e) => { const u = e.args?.data?.url ?? ''; return u.endsWith('/sdk/replay.js') ? 'r' : /\/sdk\/(index|replayd\.min)\.js$/.test(u) ? 'c' : ''; };
   // top-level per kind: skip events nested in an open event of the same kind
   const open = [];
@@ -108,7 +110,7 @@ function analyse(trace, from, to) {
 
 /** decodes the uploaded segments and checks invariants */
 function check(segs, thr) {
-  const out = { segments: segs.length, bad: [], textsEmitted: 0, maxRatePerNode: 0, fullSnapshots: 0 };
+  const out = { segments: segs.length, bad: [], textsEmitted: 0, maxRatePerNode: 0, fullSnapshots: 0, shadowCaptured: false };
   const last = new Map();
   let minGap = Infinity;
   const all = [];
@@ -129,7 +131,10 @@ function check(segs, thr) {
       out.kinds[kk] = (out.kinds[kk] ?? 0) + 1;
       if (e.type === 2) out.fullSnapshots++;
       const s = JSON.stringify(e);
+      if (s.includes('benchmark-visible-shadow')) out.shadowCaptured = true;
       if (s.includes('secret-jwt')) out.bad.push('Centrifugo token not redacted');
+      if (['benchmark-password-value','benchmark-masked-value','benchmark-blocked-value'].some(value=>s.includes(value)))
+        out.bad.push('Snapshot privacy fixture was exposed');
       // synthetic coalesced mutations carry texts only; measure per-node spacing
       if (e.type === 3 && e.data.source === 0 && e.data.texts?.length && !e.data.adds.length && !e.data.attributes.length && !e.data.removes.length) {
         for (const t of e.data.texts) {
@@ -141,6 +146,7 @@ function check(segs, thr) {
       }
     }
   out.minGapMs = minGap === Infinity ? null : minGap;
+  if (!out.shadowCaptured) out.bad.push('Shadow DOM fixture was not recorded');
   // the flush keeps a per-node last-emit time: spacing ≥ N - 50 ms
   if (thr && minGap < thr - 50) out.bad.push(`throttled node emitted after ${minGap} ms (< ${thr})`);
   return out;
@@ -152,24 +158,37 @@ async function run(scenario, rate, sdk) {
   const up = cur = { replay: [], bytes: 0, events: 0, from: 0, sdk };
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate });
-  await browser.startTracing(page, { categories: (process.env.CATS ?? 'devtools.timeline').split(',') });
+  const startupProfile = process.env.PROFILE && process.env.PROFILE_PHASE === 'startup' && sdk;
+  if (startupProfile) {
+    await cdp.send('Profiler.enable');
+    await cdp.send('Profiler.setSamplingInterval', { interval: 100 });
+    await cdp.send('Profiler.start');
+  }
+  await browser.startTracing(page, { categories: [...(process.env.CATS ?? 'devtools.timeline,disabled-by-default-devtools.timeline').split(','), 'blink.user_timing'] });
   await page.goto(`http://127.0.0.1:${port}/pages/terminal.html?${ALL[scenario]}`);
-  const navAt = Date.now();
   // load → idle (≤ 2 s) → replay chunk → snapshot; then 1 s settle and SECONDS of steady state
   const settle = 2500 + 1000 * rate;
   await page.waitForTimeout(settle);
-  const tStart = (up.from = Date.now());
-  if (process.env.PROFILE && sdk) {
+  if (startupProfile) {
+    const { profile } = await cdp.send('Profiler.stop');
+    (await import('node:fs')).writeFileSync(process.env.PROFILE, JSON.stringify(profile));
+  }
+  up.from = Date.now();
+  const tStart = await page.evaluate(() => {
+    performance.mark('replayd-bench-anchor');
+    return performance.getEntriesByName('replayd-bench-anchor')[0].startTime;
+  });
+  if (process.env.PROFILE && !startupProfile && sdk) {
     await cdp.send('Profiler.enable');
     await cdp.send('Profiler.setSamplingInterval', { interval: 100 });
     await cdp.send('Profiler.start');
   }
   await page.waitForTimeout(SECONDS * 1000);
-  if (process.env.PROFILE && sdk) {
+  if (process.env.PROFILE && !startupProfile && sdk) {
     const { profile } = await cdp.send('Profiler.stop');
     (await import('node:fs')).writeFileSync(process.env.PROFILE, JSON.stringify(profile));
   }
-  const tEnd = Date.now();
+  const tEnd = await page.evaluate(() => performance.now());
   const trace = String(await browser.stopTracing());
   if (process.env.DUMP && sdk) (await import('node:fs')).writeFileSync(process.env.DUMP, trace);
   await cdp.send('HeapProfiler.collectGarbage');
@@ -178,13 +197,14 @@ async function run(scenario, rate, sdk) {
   const msgs = await page.evaluate(() => window.__msgs());
   await ctx.close();
   if (!sdk) return { heap };
-  const a = analyse(trace, tStart - navAt, tEnd - navAt);
+  const a = analyse(trace, tStart, tEnd);
   // long tasks after the snapshot task (time bases differ slightly: trace vs timeOrigin)
-  const longAfter = lt.filter(([s, d]) => s > a.snapEnd - a.snapshot + 30 && d > 50);
+  const longAfter = lt.filter(([s, d]) => s >= a.snapEnd - 5 && d > 50);
   const thr = Number(new URLSearchParams(ALL[scenario]).get('throttle') ?? 0);
   return { ...a, msgs, longTasks: longAfter.length, longTaskMax: Math.max(0, ...longAfter.map((x) => x[1])), kbPerS: up.bytes / 1024 / SECONDS, heap, check: check(up.replay, thr) };
 }
 
+try {
 const results = [];
 for (const rate of RATES) {
   for (const sc of SCEN) {
@@ -199,16 +219,15 @@ for (const rate of RATES) {
       scenario: sc, rate, snapshot_ms: m('snapshot'), batch_p50_ms: m('p50'), batch_p95_ms: m('p95'), batch_max_ms: m('max'),
       batch_p95_incl_core_ms: m('p95core'), replay_ms_per_s: m('msPerS'), long_tasks_after_snapshot: Math.max(...runs.map((x) => x.longTasks)),
       long_task_max_ms: Math.max(...runs.map((x) => x.longTaskMax)), uplink_kb_s: m('kbPerS'), heap_delta_mb: +((med(runs.map((x) => x.heap)) - base[0].heap) / 1048576).toFixed(2),
-      ws_msgs: med(runs.map((x) => x.msgs)), p95_runs: runs.map((x) => +x.p95.toFixed(2)), check: runs[0].check,
+      ws_msgs: med(runs.map((x) => x.msgs)), p95_runs: runs.map((x) => +x.p95.toFixed(2)), checks: runs.map((x) => x.check),
     };
     results.push(r);
     console.log(JSON.stringify(r));
   }
 }
-await browser.close();
-server.close();
-const bad = results.filter((r) => r.check.bad.length);
+const bad = results.map(r => ({ scenario:r.scenario,rate:r.rate,failures:replayFailures(r) })).filter(r=>r.failures.length);
 if (bad.length) {
-  console.error('segment checks failed:', JSON.stringify(bad.map((r) => [r.scenario, r.check.bad])));
-  process.exit(1);
+  console.error('replay acceptance failed:', JSON.stringify(bad));
+  process.exitCode = 1;
 }
+} finally { await browser.close(); server.close(); }

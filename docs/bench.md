@@ -346,3 +346,47 @@ The final local end-to-end recheck measured issue visibility at 3,953 ms and the
 first frame at 602–669 ms (632 ms median), within the existing 5 s / 1 s budgets. These are
 desktop results, not Android hardware acceptance. UI refinement does not change SDK capture
 or ingest behavior.
+
+### Coding completion and enforced benchmark runner — 2026-11-06
+
+The scheduled `bench/perf/run.mjs` entry point was a no-op stub. It now runs cold init,
+WebSocket gate, replay capture and the Sentry comparison sequentially, saves bounded logs
+and `summary.json`, and propagates child failures. Dashboard/unit/backup/WordPress CI checks
+are wired separately. Budget-check unit tests reject missing or nonfinite measurements,
+missing captures, later-repetition privacy failures and exceeded thresholds. D-20 is the
+only batch exception; no limit was increased.
+
+Trace analysis now anchors to a browser `performance.mark` on the measured main thread.
+This aligns trace windows with `PerformanceObserver` timestamps and excludes the initial
+snapshot task itself from the *post-snapshot* long-task count. The earlier observed 172 ms
+entry was not reliable evidence of a separate later long task. Earlier measurements remain
+above as historical evidence, not overwritten as if they used the corrected harness.
+
+The pinned recorder avoids a temporary object and redundant map lookup per serialized node,
+and avoids element-only callbacks for document/text nodes. The capture options and privacy
+checks are unchanged. The native fixture now contains a nonempty password, masked and
+blocked text, and a shadow tree; every repetition checks both exclusion and preserved content.
+
+`scripts/bench-local.ps1`, 15 s steady state, three repetitions, terminal-1000:
+
+| Metric | 1× | 4× |
+|---|---:|---:|
+| Initial snapshot task, median | 21.36 ms | 144.00 ms |
+| Replay batch p95, median | 0.79 ms | 3.08 ms |
+| Batch p95 including core | 1.92 ms | 9.63 ms |
+| Replay main-thread work | 1.07 ms/s | 4.07 ms/s |
+| Long tasks after initial snapshot | 0 | 0 |
+| Uplink | 2.74 KB/s | 1.56 KB/s |
+| Main-thread heap delta | 1.32 MB | 1.31 MB |
+| Privacy, shadow DOM, wire and throttle checks | All 3 passed | All 3 passed |
+
+This local run exits zero with the original snapshot and uplink limits and the recorded
+D-20 batch exception. Timing remains hardware-sensitive; it is not a physical-device claim.
+Before the allocation changes, the new orchestrator correctly exited nonzero for a 156.42 ms
+4× snapshot, proving the formerly silent failure is now visible.
+
+Cold-init recheck (15 samples): 0.750 ms median at 1× (0.950 ms p90); 4.055 ms at 4×,
+reported separately from the desktop initialization gate. WebSocket gate: 3.175 µs/message
+at 4× in the local orchestrator check, below 5 µs. SDK lint, 140 unit tests plus four gate
+tests, and all size checks pass: core 6.90 KB, IIFE 6.96 KB, replay 25.57 KB, worker 2.76 KB.
+The source-map, error and server ingest code did not change. Live acceptance is owner-run (D-34).

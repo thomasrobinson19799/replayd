@@ -8,18 +8,19 @@
 //
 // Usage: pnpm --filter @replayd/bench run bench:ws      env: N=200000 RUNS=5 RATE=4 NO_BUILD=1
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { startServer } from '../server.mjs';
 
 const N = Number(process.env.N ?? 200_000), RUNS = Number(process.env.RUNS ?? 5), RATE = Number(process.env.RATE ?? 4);
 const BUDGET_US = 5;
-const sdkRoot = new URL('../../', import.meta.url).pathname;
-const dist = new URL('../../packages/core/dist/', import.meta.url).pathname;
+const sdkRoot = fileURLToPath(new URL('../../', import.meta.url));
+const dist = fileURLToPath(new URL('../../packages/core/dist/', import.meta.url));
 if (!process.env.NO_BUILD) execSync('pnpm --filter @replayd/core run build', { cwd: sdkRoot, stdio: 'inherit' });
 
 const { server, port } = await startServer(0);
-const browser = await chromium.launch();
+const browser = await chromium.launch({channel:process.env.PLAYWRIGHT_CHANNEL || undefined});
 const page = await browser.newPage();
 await page.route('**/*', async (route) => {
   const u = new URL(route.request().url());

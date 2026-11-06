@@ -1,7 +1,7 @@
 # PROGRESS — replayd
 
 Resume protocol: read PRD.md (incl. Decisions log), AGENTS.md, this file and `git log --oneline`; continue from the first task not marked `done`.
-Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
+Status values: `todo` · `wip` · `done` · `owner-validation` · `blocked` · `skipped`. `owner-validation` means repository implementation/local checks are complete and the owner has explicitly taken the remaining live acceptance checks (D-34); it does not mean those checks passed.
 
 ## M0 — Risks retired, skeleton green
 | ID | Task | Status | Notes / blockers |
@@ -53,10 +53,10 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 | ID | Task | Status | Notes / blockers |
 |---|---|---|---|
 | T-40 | `@replayd/nuxt`, `@replayd/vue`, `@replayd/react`, IIFE build | done | Vue errorHandler chain (component + info), React root handler + ErrorBoundary, Nuxt module + client plugin (runtime config, app_version release, self/apiHost, chained handler + app:error), IIFE data-attribute auto-init; core dedups already-reported errors (D-28). examples/{html,vue,react,nuxt} + e2e/adapters.e2e.mjs: each app → exactly 1 issue with adapter context. Adapters 302/436/416 B. |
-| T-41 | `replayd-wp` plugin | blocked | Implementation and local acceptance complete. PHP checks and real WordPress 6.8 pass. Repeated against actual WP Rocket v3.24 DelayJS code on the WordPress page: negative control delays the SDK; plugin exclusions preserve capture before interaction. See docs/spikes/T-04.md. **Remaining:** staging fxglory.com URL/access and site-specific cache/CDN acceptance. |
+| T-41 | `replayd-wp` plugin | owner-validation | Code and local WordPress/WP Rocket checks complete. Installable ZIP built by scripts/package-wordpress.py. Owner handles staging installation and live cache/CDN checks under D-34. |
 | T-50 | Observability: metrics, JSON logs, Grafana JSON, alert rules | done | Prometheus exporter + /metrics (internal), queue depth / disk / symbolication / Telegram / API-latency metrics, API request JSON logs with req_id + latency_ms (D-29); deploy/observability: Grafana dashboard (18 panels), 6 alert rules, scrape example. e2e/observability.e2e.mjs: promtool OK, live scrape, all dashboard queries valid, imports into Grafana 12.1. |
-| T-51 | Benchmarks vs Sentry config, real-device APK checklist | blocked | Windows benchmark runners fixed and SDK checks pass (139 tests, size limits unchanged). Three-run snapshot median: 23.00 ms at 1×, 171.21 ms at 4×; batch p95 0.79/3.26 ms (existing D-20 exception). See docs/bench.md. **Remaining:** reliable <150 ms snapshot acceptance and physical Android lifecycle, 30-minute heap/thermal evidence. Android tools installed; no connected device on 2026-11-06. |
-| T-52 | Migration: replace Sentry in 3 terminals + sites | blocked | Shared terminal repo located and its existing migration verified at ef67dffcc10d4f554656af4503b28994fe08cfce. All 9 brand/platform configs reference replayd; source-map CI and Sentry removal pass the read-only inventory. See docs/terminal-migration-evidence.json and docs/migration.md. **Remaining:** website repositories/staging and live rollout evidence. No changes or deployment to the external repo. |
+| T-51 | Benchmarks vs Sentry config, real-device APK checklist | owner-validation | Benchmark stub replaced with real suites and failing gates; snapshot allocation reductions verified. Three-run snapshot median 21.36 ms at 1× / 144.00 ms at 4×, no post-snapshot long tasks, native-browser privacy checks pass. SDK lint, 140 unit + 4 gate tests and size limits pass. Owner handles physical Android lifecycle, heap/thermal and live performance acceptance. |
+| T-52 | Migration: replace Sentry in 3 terminals + sites | owner-validation | Available shared terminal source verified across all 9 brand/platform configs at ef67dffcc10d4f554656af4503b28994fe08cfce; source-map CI and Sentry removal verified. WordPress plugin, setup examples and tunnel/migration instructions complete. Owner performs site installation and live rollout validation; these are not implementation blockers (D-34). |
 
 ## Dashboard completion and UI overhaul (owner request, 2026-11-05)
 | ID | Task | Status | Notes / acceptance |
@@ -72,22 +72,16 @@ Status values: `todo` · `wip` · `done` · `blocked` · `skipped`.
 
 ## Continue in a new session
 
-Read PRD.md (including decisions), AGENTS.md, this tracker, docs/dashboard-audit.md,
-docs/bench.md and docs/migration.md. Work continues from `codex/ui-05-sentry-triage`.
-The owner selected Sentry-like dashboard conventions and delegated routine choices.
-Do not push or deploy. Preserve the completed implementation and local verification.
+Read PRD.md (including decisions), AGENTS.md, this tracker and README.md.
+The owner selected Sentry-like dashboard conventions and owns live testing (D-34).
+Do not wait for staging access or hardware as an agent blocker, do not mark unperformed
+owner checks passed, and do not push or deploy. Canvas and the other v1 exclusions remain.
 
-The remaining acceptance gates need WordPress/site staging access, physical Android
-hardware and live migration evidence. The shared terminal source migration is already
-verified; do not repeat or overwrite it blindly. Do not mark those gates done from
-emulation or static source checks. The 4× snapshot budget is still open; do not loosen it.
-
-Windows: use installed Chrome via `e2e/chrome-preload.mjs`, or `PLAYWRIGHT_CHANNEL=chrome`
-for SDK benchmarks. `scripts/local-stack.ps1` starts already-built local images with the
-required Docker Desktop proxy and mock Telegram configuration. `node e2e/run-local.mjs`
-now includes WordPress; `data/wp-rocket` supplies the actual optional WP Rocket v3.24
-source for compatibility checks. `scripts/bench-local.ps1` reproduces SDK measurements.
-Required checks and per-task commits remain defined in AGENTS.md.
+Local tools: `scripts/local-stack.ps1`, `node e2e/run-local.mjs`,
+`scripts/bench-local.ps1`, `node scripts/test-backup.mjs` and
+`python scripts/package-wordpress.py`. Actual WP Rocket compatibility uses the optional
+source checkout at `data/wp-rocket` or `WPROCKET_DIR`. Read docs/owner-acceptance.md for
+the owner's remaining checks; docs/bench.md records the latest unchanged-budget results.
 
 ## Session log
 - 2026-11-06: Owner delegated remaining design choices and selected Sentry conventions (D-33). UI-05 complete with independent review, final local image rebuild and 45 responsive/open/theme screenshots. Local WordPress+WP Rocket and shared-terminal source blockers resolved; physical Android, WordPress staging/site access and reliable snapshot-budget acceptance remain explicit gates. Required dashboard/SDK checks and all 12 integration suites pass. Work is committed locally on the cumulative task branch `codex/ui-05-sentry-triage`; no push or deployment. Updated continuation instructions remove the obsolete instruction to push old branches.

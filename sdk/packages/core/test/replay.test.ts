@@ -106,6 +106,28 @@ describe('replay chunk (main thread)', () => {
     expect(ev.map((e) => e.type).slice(0, 2)).toEqual([4, 2]);
     expect(ev).toContainEqual({ type: 5, timestamp: 1_730_619_999_000, data: { tag: 'console', payload: { level: 'log', args: ['early'] } } });
     expect(JSON.stringify(ev)).not.toContain('hunter2');
+    expect(JSON.stringify(ev)).not.toContain('9.99');
+  });
+
+  it('preserves nested and shadow DOM structure in the initial snapshot', async () => {
+    const host = document.createElement('section');
+    host.attachShadow({ mode: 'open' }).innerHTML = '<span>visible-shadow-content</span>';
+    document.body.append(host);
+    const blocked = document.createElement('div');
+    blocked.setAttribute('data-rp-block', '');
+    blocked.innerHTML = '<span>blocked-snapshot-content</span>';
+    document.body.append(blocked);
+    await start();
+    await vi.advanceTimersByTimeAsync(500);
+    const snapshot = events().find(e => e.type === 2);
+    const serialized = JSON.stringify(snapshot);
+    // happy-dom's untainted text accessor is empty; the real-browser benchmark verifies the text itself.
+    expect(serialized).toContain('"isShadowHost":true');
+    expect(serialized).toContain('"isShadow":true');
+    expect(serialized).toContain('free');
+    expect(serialized).not.toContain('blocked-snapshot-content');
+    expect(serialized).not.toContain('hunter2');
+    expect(serialized).not.toContain('9.99');
   });
 
   it('live custom events go through the sink; an error forces a segment cut', async () => {

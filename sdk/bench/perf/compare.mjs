@@ -55,9 +55,10 @@ const sdkUrl = { replayd: /\/sdk\/(replayd\.min|replay|index)\.js$/, sentry: /\/
 
 function analyse(trace, v, from, to) {
   const ev = JSON.parse(trace).traceEvents;
-  const main = ev.find((e) => e.name === 'thread_name' && e.args?.name === 'CrRendererMain' && ev.some((x) => x.pid === e.pid && x.name === 'FunctionCall' && /\/pages\/terminal/.test(x.args?.data?.url ?? '')));
+  const main = ev.find(e => e.name === 'replayd-bench-anchor');
+  if (!main) throw new Error('Benchmark clock anchor is missing');
   const calls = ev.filter((e) => e.ph === 'X' && e.pid === main.pid && e.tid === main.tid && e.name === 'FunctionCall').sort((a, b) => a.ts - b.ts || b.dur - a.dur);
-  const nav = ev.find((e) => e.name === 'navigationStart' && e.pid === main.pid)?.ts ?? calls[0].ts;
+  const nav = main.ts - from * 1000;
   const re = sdkUrl[v];
   const open = [];
   const win = new Map();
@@ -82,22 +83,26 @@ async function run(v, rate) {
   cur = { v, bytes: 0, from: 0 };
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate });
-  await browser.startTracing(page, { categories: ['devtools.timeline'] });
+  await browser.startTracing(page, { categories: ['devtools.timeline','blink.user_timing'] });
   await page.goto(`http://127.0.0.1:${port}/pages/terminal.html?${SCENARIO}`);
-  const navAt = Date.now();
   await page.waitForTimeout(2500 + 1000 * rate);
-  const t0 = (cur.from = Date.now());
+  cur.from = Date.now();
+  const t0 = await page.evaluate(() => {
+    performance.mark('replayd-bench-anchor');
+    return performance.getEntriesByName('replayd-bench-anchor')[0].startTime;
+  });
   await page.waitForTimeout(SECONDS * 1000);
-  const t1 = Date.now();
+  const t1 = await page.evaluate(() => performance.now());
   const trace = String(await browser.stopTracing());
   await cdp.send('HeapProfiler.collectGarbage');
   const heap = (await cdp.send('Runtime.getHeapUsage')).usedSize;
   const lt = await page.evaluate(() => window.__lt);
   await ctx.close();
-  const a = v === 'none' ? { p50: 0, p95: 0, msPerS: 0 } : analyse(trace, v, t0 - navAt, t1 - navAt);
+  const a = v === 'none' ? { p50: 0, p95: 0, msPerS: 0 } : analyse(trace, v, t0, t1);
   return { ...a, heap, long: lt.filter(([s, d]) => s > 5000 && d > 50).length, kbps: cur.bytes / 1024 / SECONDS };
 }
 
+try {
 for (const rate of RATES) {
   const base = await run('none', rate);
   for (const v of ['replayd', 'sentry']) {
@@ -111,5 +116,4 @@ for (const rate of RATES) {
     }));
   }
 }
-await browser.close();
-server.close();
+} finally { await browser.close(); server.close(); }

@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@rrweb/record@2.2.0':
-    hash: bd0c424e7c552f63813160de2169e3ab6b7d192ae8adbb39b2fff684535e6ec2
+    hash: 19fbe897108b3cf7f49f8fcc3b73c380a487e8de434402ef44ddca0083da8144
     path: patches/@rrweb__record@2.2.0.patch
 
 importers:
@@ -54,7 +54,7 @@ importers:
     devDependencies:
       '@rrweb/record':
         specifier: 2.2.0
-        version: 2.2.0(patch_hash=bd0c424e7c552f63813160de2169e3ab6b7d192ae8adbb39b2fff684535e6ec2)
+        version: 2.2.0(patch_hash=19fbe897108b3cf7f49f8fcc3b73c380a487e8de434402ef44ddca0083da8144)
       '@sentry/browser':
         specifier: 11.10.0
         version: 11.10.0
@@ -74,7 +74,7 @@ importers:
     devDependencies:
       '@rrweb/record':
         specifier: 2.2.0
-        version: 2.2.0(patch_hash=bd0c424e7c552f63813160de2169e3ab6b7d192ae8adbb39b2fff684535e6ec2)
+        version: 2.2.0(patch_hash=19fbe897108b3cf7f49f8fcc3b73c380a487e8de434402ef44ddca0083da8144)
 
   packages/nuxt:
     dependencies:
@@ -4489,7 +4489,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.67.4':
     optional: true
 
-  '@rrweb/record@2.2.0(patch_hash=bd0c424e7c552f63813160de2169e3ab6b7d192ae8adbb39b2fff684535e6ec2)':
+  '@rrweb/record@2.2.0(patch_hash=19fbe897108b3cf7f49f8fcc3b73c380a487e8de434402ef44ddca0083da8144)':
     dependencies:
       '@rrweb/types': 2.2.0
       '@rrweb/utils': 2.2.0

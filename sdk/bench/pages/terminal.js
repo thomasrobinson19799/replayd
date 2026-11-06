@@ -29,13 +29,16 @@
   const form = el('form');
   for (let i = 0; i < 12; i++) {
     const lab = el('label', 'c' + (i + 30), `Field ${i}`);
-    const inp = el('input'); inp.name = `f${i}`; inp.value = i === 3 ? '' : String(i * 0.01);
+    const inp = el('input'); inp.name = `f${i}`; inp.value = i === 3 ? 'benchmark-password-value' : String(i * 0.01);
     if (i === 3) inp.type = 'password';
     const sel = el('select'); for (let k = 0; k < 6; k++) sel.append(el('option', null, `Opt ${k}`));
     form.append(el('div', 'row', null), lab, inp, sel);
   }
   form.append(el('button', 'buy', 'Buy'), el('button', 'sell', 'Sell'));
   op.append(form);
+  const masked = el('div'); masked.setAttribute('data-rp-mask', ''); masked.append(el('span', null, 'benchmark-masked-value')); op.append(masked);
+  const blocked = el('div'); blocked.setAttribute('data-rp-block', ''); blocked.append(el('span', null, 'benchmark-blocked-value')); op.append(blocked);
+  const shadow = el('div'); shadow.attachShadow({ mode: 'open' }).append(el('span', null, 'benchmark-visible-shadow')); op.append(shadow);
 
   // order book 2x20 levels
   const ob = document.getElementById('orderbook');
