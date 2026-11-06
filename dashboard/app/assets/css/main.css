@@ -1109,6 +1109,22 @@
   padding: 8px 0 12px;
   border-bottom: 1px solid var(--line);
 }
+.issue-header-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-3) 0 var(--space-4);
+  border-top: 1px solid var(--line);
+}
+.issue-header-facts > div { min-width: 100px; max-width: 100%; }
+.issue-header-facts dt { color: var(--muted-foreground); font-size: 11px; margin-bottom: var(--space-1); }
+.issue-header-facts dd { font-size: 12px; overflow-wrap: anywhere; }
+.issue-workflow-main { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+.issue-workflow > .dropdown { margin-left: auto; align-self: flex-start; }
+.issue-workflow-main .dropdown-panel { left: 0; right: auto; }
+.issue-workflow .dropdown-panel { min-width: 200px; }
+.issue-workflow .dropdown-panel .copy-control { display: block; }
+.issue-workflow .dropdown-panel button { width: 100%; text-align: left; justify-content: flex-start; }
 .issue-workflow [data-testid=action-resolve] {
   background: var(--accent);
   color: var(--on-solid);

@@ -40,6 +40,7 @@ try {
   const dp = await dash.newPage();
   await dp.goto(`${BASE}/projects/${slug}/issues/${issue.id}`);
   // resolve in next release: the same release does not reopen it …
+  await dp.locator('summary').filter({hasText:'Resolve options'}).click();
   await dp.click('[data-testid="action-resolve-next"]');
   await dp.waitForSelector('[data-testid="issue-status-text"] >> text=Resolved in next release (after 1.0.0)');
   await fire('1.0.0');

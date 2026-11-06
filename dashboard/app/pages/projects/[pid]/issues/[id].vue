@@ -155,9 +155,20 @@ watch(id, load);
           <div><dt>Users</dt><dd>{{ compact(issue.users_seen) }}</dd></div>
         </dl>
       </header>
+      <dl class="issue-header-facts">
+        <div><dt>First seen</dt><dd><UiRelativeTime :value="issue.first_seen" /></dd></div>
+        <div><dt>Last seen</dt><dd><UiRelativeTime :value="issue.last_seen" /></dd></div>
+        <div><dt>First release</dt><dd>{{ issue.first_release || 'Not recorded' }}</dd></div>
+        <div><dt>Latest release</dt><dd>{{ issue.last_release || 'Not recorded' }}</dd></div>
+        <div><dt>Platforms</dt><dd>{{ Object.keys(issue.platform_split).map(platformLabel).join(', ') || 'Not recorded' }}</dd></div>
+      </dl>
       <div class="issue-workflow">
+        <div class="issue-workflow-main">
         <IssueStatusBar :issue="issue" :can-change="issue.can_change_status" @updated="u => issue && Object.assign(issue, u)" />
-        <div class="flex flex-wrap gap-2"><UiCopyButton v-if="event" :text="stackText" label="Copy stack" /><UiCopyButton :text="shareUrl" label="Copy link" /><UiButton v-if="issue.can_delete" variant="danger" @click="deleteOpen = true">Delete issue</UiButton></div>
+        <NuxtLink v-if="replayLink" :to="replayLink" class="ui-button" data-testid="header-play-replay">Play replay</NuxtLink>
+        <UiCopyButton v-if="event" :text="stackText" label="Copy stack" />
+        </div>
+        <UiDropdown label="More"><UiCopyButton :text="shareUrl" label="Copy link" /><UiButton v-if="issue.can_delete" variant="danger" @click="deleteOpen = true">Delete issue</UiButton></UiDropdown>
       </div>
       <div class="issue-columns">
         <section v-if="event" class="issue-evidence" aria-label="Event details">

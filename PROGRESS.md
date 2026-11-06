@@ -87,7 +87,7 @@ Accepted specification: `docs/sharing-fields-plan.md`. Baseline UI-06 already co
 | T-62 | Ignore rules | done | docs/t-62-ignore-rules.md; cached admin-only rules, bounded regex/counters, before-issue suppression, transactional audit; required checks and six responsive/theme browser views pass. |
 | T-63 | SDK/server fields | pending | Owner permits core/IIFE 9 KB only |
 | T-64 | Copy stack | done | docs/t-64-copy-stack.md; shared in-app toggle, source context and last 30 breadcrumbs; formatter exclusions and real clipboard checks pass. Committed before T-63 while its metadata-limit decision is pending. |
-| T-65 | Issue header | pending | Header/actions only |
+| T-65 | Issue header | done | docs/t-65-issue-header.md; facts/actions only, next-release and More menus, replay shortcut. Real clipboard/status/custom-ignore/keyboard checks and six theme/width views pass; body layouts preserved. |
 | T-66 | Network filters | pending | Fetch/XHR + combined filters |
 | T-67 | Fullscreen | pending | Reproduce then fix |
 

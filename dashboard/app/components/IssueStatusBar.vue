@@ -71,6 +71,7 @@ const text = computed(() => statusText(props.issue, dateTime))
         >
           {{ resolveAction.label }}
         </button>
+        <UiDropdown label="Resolve options">
         <button
           class="rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50 disabled:opacity-50"
           :disabled="busy || !issue.last_release"
@@ -80,6 +81,7 @@ const text = computed(() => statusText(props.issue, dateTime))
         >
           {{ resolveNextAction.label }}
         </button>
+        </UiDropdown>
         <div ref="ignoreRoot" class="relative ignore-control" :class="{ 'ignore-control--open': open }" @keydown.esc.stop="closeIgnore">
           <button
             ref="ignoreTrigger"
