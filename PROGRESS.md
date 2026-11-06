@@ -89,7 +89,7 @@ Accepted specification: `docs/sharing-fields-plan.md`. Baseline UI-06 already co
 | T-64 | Copy stack | done | docs/t-64-copy-stack.md; shared in-app toggle, source context and last 30 breadcrumbs; formatter exclusions and real clipboard checks pass. Committed before T-63 while its metadata-limit decision is pending. |
 | T-65 | Issue header | done | docs/t-65-issue-header.md; facts/actions only, next-release and More menus, replay shortcut. Real clipboard/status/custom-ignore/keyboard checks and six theme/width views pass; body layouts preserved. |
 | T-66 | Network filters | done | docs/t-66-network-filters.md; fetch/XHR metadata and AND dropdowns, existing search/failed filter and virtualization retained. Unit/SDK/viewer-filter and browser checks pass; six theme/width views. |
-| T-67 | Fullscreen | pending | Reproduce then fix |
+| T-67 | Fullscreen | done | docs/t-67-fullscreen.md; reproduced small replay/panel/button defects in Chrome/Edge, then verified replay-only aspect-fit upscaling, playback/timeline, Esc/button restore in authenticated/public modes. |
 
 ### Previous continuation notes (superseded by the task table above)
 

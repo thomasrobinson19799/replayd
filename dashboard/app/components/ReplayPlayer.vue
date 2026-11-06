@@ -49,6 +49,17 @@ const networkSel = ref<NetworkItem | null>(null);
 const detailOpen = ref(false);
 const preview = ref("");
 const fullscreenRoot = ref<HTMLElement | null>(null);
+const isFullscreen = ref(false);
+async function fullscreenChanged() {
+  isFullscreen.value = document.fullscreenElement === fullscreenRoot.value;
+  await nextTick();
+  fit();
+}
+function fullscreenKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && document.fullscreenElement === fullscreenRoot.value) {
+    void document.exitFullscreen().catch(() => {});
+  }
+}
 const deleteOpen = ref(false);
 const deleting = ref(false);
 async function removeSession() {
@@ -141,15 +152,17 @@ function fit() {
   const vw = Number(iframe.width) || iframe.clientWidth;
   const vh = Number(iframe.height) || iframe.clientHeight;
   if (!vw || !vh) return;
-  stage.value.style.height = `${Math.min((stage.value.clientWidth * vh) / vw, window.innerHeight * 0.6)}px`;
+  stage.value.style.height = isFullscreen.value ? '' : `${Math.min((stage.value.clientWidth * vh) / vw, window.innerHeight * 0.6)}px`;
   const s = Math.min(
     stage.value.clientWidth / vw,
     stage.value.clientHeight / vh,
-    1,
+    isFullscreen.value ? Infinity : 1,
   );
   scale.value = s;
   w.style.transform = `scale(${s})`;
   w.style.transformOrigin = "top left";
+  w.style.left = isFullscreen.value ? `${(stage.value.clientWidth - vw * s) / 2}px` : '0';
+  w.style.top = isFullscreen.value ? `${(stage.value.clientHeight - vh * s) / 2}px` : '0';
 }
 
 function seekTo(abs: number) {
@@ -401,6 +414,8 @@ onMounted(() => {
   };
   load();
   window.addEventListener("resize", fit);
+  document.addEventListener('fullscreenchange', fullscreenChanged);
+  document.addEventListener('keydown', fullscreenKey);
 });
 onBeforeUnmount(() => {
   disposed = true;
@@ -409,11 +424,13 @@ onBeforeUnmount(() => {
   worker?.terminate();
   replayer?.destroy();
   window.removeEventListener("resize", fit);
+  document.removeEventListener('fullscreenchange', fullscreenChanged);
+  document.removeEventListener('keydown', fullscreenKey);
 });
 </script>
 
 <template>
-  <div ref="fullscreenRoot" class="flex flex-col gap-3 bg-gray-50">
+  <div class="flex flex-col gap-3 bg-gray-50">
     <div v-if="!publicView" class="flex flex-wrap items-baseline gap-3 text-sm">
       <NuxtLink
         v-if="session"
@@ -454,7 +471,7 @@ onBeforeUnmount(() => {
     <ReplayDownload v-if="session" :endpoint="endpoint" />
 
     <div class="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
-      <div class="flex min-w-0 flex-col gap-2">
+      <div ref="fullscreenRoot" class="replay-screen flex min-w-0 flex-col gap-2">
         <div
           ref="stage"
           class="relative h-[60vh] overflow-hidden rounded border border-gray-200 bg-gray-100"
@@ -535,7 +552,7 @@ onBeforeUnmount(() => {
             ><input v-model="skipInactive" type="checkbox" > Skip
             inactivity</label
           >
-          <UiButton @click="fullscreen">Fullscreen</UiButton>
+          <UiButton :aria-pressed="isFullscreen" @click="fullscreen">{{ isFullscreen ? 'Exit fullscreen' : 'Fullscreen' }}</UiButton>
           <span class="ml-auto flex flex-wrap gap-2 text-xs text-gray-500">
             <span
               ><i class="inline-block h-2 w-2 rounded-full bg-red-500" />
@@ -961,6 +978,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
+.replay-screen:fullscreen { width: 100%; height: 100%; padding: 12px; background: var(--background); color: var(--foreground); overflow: hidden; }
+.replay-screen:fullscreen [data-testid="replay-stage"] { flex: 1; min-height: 0; height: auto; }
+.replay-screen:fullscreen > :not([data-testid="replay-stage"]) { flex-shrink: 0; }
+.replay-screen:fullscreen .marker-preview { display: none; }
 .replayer-host .replayer-wrapper {
   position: absolute;
   top: 0;

@@ -1,0 +1,154 @@
+[
+  {
+    "channel": "chrome",
+    "publicView": false,
+    "normal": {
+      "width": 290.87646484375,
+      "height": 646,
+      "x": 233,
+      "y": 149,
+      "controlsBottom": 934,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": false,
+      "exitLabel": false
+    },
+    "full": {
+      "width": 429.5606689453125,
+      "height": 954,
+      "x": 745.21875,
+      "y": 13,
+      "controlsBottom": 1068,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": true,
+      "exitLabel": true
+    },
+    "escaped": {
+      "width": 290.87646484375,
+      "height": 646,
+      "x": 233,
+      "y": 149,
+      "controlsBottom": 934,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": false,
+      "exitLabel": false
+    },
+    "pass": true
+  },
+  {
+    "channel": "chrome",
+    "publicView": true,
+    "normal": {
+      "width": 290.8764953613281,
+      "height": 646,
+      "x": 13,
+      "y": 59,
+      "controlsBottom": 844,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": false,
+      "exitLabel": false
+    },
+    "full": {
+      "width": 429.5606689453125,
+      "height": 954,
+      "x": 745.21875,
+      "y": 13,
+      "controlsBottom": 1068,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": true,
+      "exitLabel": true
+    },
+    "escaped": {
+      "width": 290.8764953613281,
+      "height": 646,
+      "x": 13,
+      "y": 59,
+      "controlsBottom": 844,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": false,
+      "exitLabel": false
+    },
+    "pass": true
+  },
+  {
+    "channel": "msedge",
+    "publicView": false,
+    "normal": {
+      "width": 290.87646484375,
+      "height": 646,
+      "x": 233,
+      "y": 149,
+      "controlsBottom": 934,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": false,
+      "exitLabel": false
+    },
+    "full": {
+      "width": 429.5606689453125,
+      "height": 954,
+      "x": 745.21875,
+      "y": 13,
+      "controlsBottom": 1068,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": true,
+      "exitLabel": true
+    },
+    "escaped": {
+      "width": 290.87646484375,
+      "height": 646,
+      "x": 233,
+      "y": 149,
+      "controlsBottom": 934,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": false,
+      "exitLabel": false
+    },
+    "pass": true
+  },
+  {
+    "channel": "msedge",
+    "publicView": true,
+    "normal": {
+      "width": 290.8764953613281,
+      "height": 646,
+      "x": 13,
+      "y": 59,
+      "controlsBottom": 844,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": false,
+      "exitLabel": false
+    },
+    "full": {
+      "width": 429.5606689453125,
+      "height": 954,
+      "x": 745.21875,
+      "y": 13,
+      "controlsBottom": 1068,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": true,
+      "exitLabel": true
+    },
+    "escaped": {
+      "width": 290.8764953613281,
+      "height": 646,
+      "x": 13,
+      "y": 59,
+      "controlsBottom": 844,
+      "viewportHeight": 1080,
+      "panelsInFullscreen": false,
+      "fullscreen": false,
+      "exitLabel": false
+    },
+    "pass": true
+  }
+]

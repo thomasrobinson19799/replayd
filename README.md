@@ -45,6 +45,10 @@ Use `appConfig.app_version` for a Nuxt release. Configure allowed origins and ad
 - [Bucket storage for finished replays](docs/object-storage.md)
 - [MP4 exports, offline rendering and encoder licensing](docs/mp4-exports.md)
 - [Ignore rules and dropped-event counters](docs/t-62-ignore-rules.md)
+- [Copy stack contents and exclusions](docs/t-64-copy-stack.md)
+- [Issue header actions](docs/t-65-issue-header.md)
+- [Network filters](docs/t-66-network-filters.md)
+- [Fullscreen behavior and verification](docs/t-67-fullscreen.md)
 
 Build an installable WordPress plugin with `python scripts/package-wordpress.py`. The ZIP
 is written to `data/releases/` and contains the plugin files without its tests. Upload it
