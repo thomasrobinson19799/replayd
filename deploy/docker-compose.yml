@@ -23,6 +23,34 @@ services:
       retries: 30
     restart: unless-stopped
 
+  backup:
+    profiles: ["backup"]
+    image: postgres:17
+    entrypoint: ["/bin/sh"]
+    command: ["/opt/replayd-backup/loop.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: replayd
+      PGDATABASE: replayd
+      PGPASSWORD: ${REPLAYD_PG_PASSWORD:-replayd}
+      BACKUP_RETENTION_DAYS: ${REPLAYD_BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - ./backup:/opt/replayd-backup:ro
+      - pgbackups:/backups
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups -maxdepth 1 -type f -name 'replayd-*.dump' -mmin -1560 -print -quit | grep -q ."]
+      interval: 5m
+      timeout: 5s
+      retries: 2
+      start_period: 5m
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+
   migrate:
     image: arigaio/atlas:1.3.6
     command: ["migrate", "apply", "--dir", "file:///migrations", "--url", *pg_url]
@@ -81,4 +109,5 @@ networks:
 
 volumes:
   pgdata:
+  pgbackups:
   replay-data:
