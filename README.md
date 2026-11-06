@@ -43,6 +43,7 @@ Use `appConfig.app_version` for a Nuxt release. Configure allowed origins and ad
 - [WordPress plugin source](wordpress/replayd-wp/replayd-wp.php)
 - [Android acceptance checklist](docs/apk-checklist.md)
 - [Bucket storage for finished replays](docs/object-storage.md)
+- [MP4 exports, offline rendering and encoder licensing](docs/mp4-exports.md)
 
 Build an installable WordPress plugin with `python scripts/package-wordpress.py`. The ZIP
 is written to `data/releases/` and contains the plugin files without its tests. Upload it

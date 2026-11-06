@@ -83,7 +83,7 @@ Accepted specification: `docs/sharing-fields-plan.md`. Baseline UI-06 already co
 | ID | Task | Status | Notes |
 |---|---|---|---|
 | T-60 | Public share links | done | docs/t-60-sharing.md; server/SDK/dashboard checks pass, authenticated/public live follow (5s), six theme/width screenshots and sharing browser tests pass. MP4 remains T-61. |
-| T-61 | MP4 rendering and live follow | pending | Depends on sharing |
+| T-61 | MP4 rendering and live follow | done | docs/mp4-exports.md; isolated offline renderer, bounded queue/disk/rate limits, H.264 and partial/latest acceptance; all required checks pass. Live follow shipped in T-60. |
 | T-62 | Ignore rules | pending | Per accepted plan |
 | T-63 | SDK/server fields | pending | Owner permits core/IIFE 9 KB only |
 | T-64 | Copy stack | pending | Exclude identity/custom fields/tags |

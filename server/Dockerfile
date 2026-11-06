@@ -11,7 +11,7 @@ RUN --mount=type=secret,id=ca,required=false \
     --mount=type=cache,target=/src/target \
     if [ -s /run/secrets/ca ]; then export CARGO_HTTP_CAINFO=/run/secrets/ca SSL_CERT_FILE=/run/secrets/ca; fi; \
     cargo build --release --locked -p replayd && cp target/release/replayd /replayd \
- && mkdir -p /data-dir
+ && mkdir -p /data-dir/_renders
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /replayd /replayd

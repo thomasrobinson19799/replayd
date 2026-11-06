@@ -90,9 +90,31 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - replay-data:/data
+      - render-data:/data/_renders
     expose: ["8080"]
     depends_on:
       migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  renderer:
+    profiles: ["app"]
+    build:
+      context: ..
+      dockerfile: renderer/Dockerfile
+    image: replayd-renderer:local
+    network_mode: none
+    user: "65532:65532"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:size=512m,mode=1777"]
+    shm_size: 512m
+    mem_limit: 3g
+    cpus: 2
+    pids_limit: 256
+    volumes:
+      - render-data:/renders
+    depends_on: [replayd]
     restart: unless-stopped
 
   nginx:
@@ -119,3 +141,4 @@ volumes:
   pgdata:
   pgbackups:
   replay-data:
+  render-data:

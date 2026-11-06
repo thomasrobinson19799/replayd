@@ -394,3 +394,21 @@ The source-map, error and server ingest code did not change. Live acceptance is 
 ## UI-06 visual restyle — 2026-11-06
 
 Final generated dashboard JS/CSS gzip artifacts total **194,437 bytes**; main CSS is **9.39 kB gzip** in the Vite report. Measured from dashboard/.output/public after pnpm build. No new dependencies, fonts or JavaScript behavior; seven changed Vue script blocks match HEAD. SDK/server performance budgets and benchmark gates are unchanged; no claim of remeasured ingestion or replay timing.
+
+## T-60 / T-61 sharing and video — 2026-11-06
+
+Rebuilt local stack, installed Chrome, existing 20 Mbps 60-minute recording fixture:
+first-frame samples **628 / 667 / 687 ms**, median **667 ms**, maximum **687 ms**,
+all below the unchanged 1000 ms budget. Playback starts before the download ends;
+seeking to 75% passes. The fixture has 697 frames / 26,850 events / 4,783,735 bytes.
+Authenticated and public live append polls every five seconds and consumes only new
+Range bytes, including final bytes when the session ends.
+
+Offline Chromium + FFmpeg exports a six-second fixture with idle time as 60 H.264
+frames at 10 fps, 412×916 (one padding row), exactly 6.000 seconds. Progress/reuse,
+public retrieval, partial coverage and latest-render tests run in `e2e/video.e2e.mjs`.
+The browser and encoder are isolated from ingest. No claim of production render
+throughput or physical-device measurements is made.
+
+SDK remains core **6.90 KB**, IIFE **6.96 KB**, replay **25.57 KB**, worker **2.76 KB**;
+adapter sizes 302/436/416 B. No SDK code or budget changes in these two tasks.

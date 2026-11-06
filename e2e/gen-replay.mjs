@@ -41,7 +41,7 @@ async function record() {
   const rrweb = await readFile(`${root}sdk/bench/node_modules/@rrweb/record/dist/record.umd.min.cjs`, 'utf8');
   const browser = await chromium.launch();
   try {
-    const page = await (await browser.newPage({ viewport: { width: 1440, height: 900 } }));
+    const page = await (await browser.newPage({ viewport: { width: Number(process.env.WIDTH ?? 1440), height: Number(process.env.HEIGHT ?? 900) } }));
     await page.goto(`http://127.0.0.1:${port}/pages/terminal.html?hist=60`);
     await page.waitForTimeout(500);
     await page.addScriptTag({ content: `window.module = undefined; window.exports = undefined; ${rrweb}` });

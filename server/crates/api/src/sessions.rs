@@ -298,6 +298,7 @@ pub async fn delete(
     )
     .await?;
     crate::audit(&st, &user, "session.delete", &sid, json!({})).await?;
+    st.renders.remove(&id.to_string()).await;
     // Redacted derivatives remain inaccessible after the metadata deletion and are swept by retention.
     Ok(StatusCode::NO_CONTENT)
 }
@@ -307,7 +308,7 @@ pub fn recording_path(data_dir: &std::path::Path, project_id: i32, day: &str, si
 }
 
 /// Plain file with the complete recording, wherever it currently lives.
-async fn locate_recording(st: &ApiState, pid: i32, day: &str, sid: &str) -> ApiResult<PathBuf> {
+pub(crate) async fn locate_recording(st: &ApiState, pid: i32, day: &str, sid: &str) -> ApiResult<PathBuf> {
     let Some(store) = &st.replay_store else {
         return Ok(recording_path(&st.data_dir, pid, day, sid));
     };

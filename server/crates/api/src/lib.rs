@@ -6,6 +6,7 @@ pub mod issues;
 pub mod projects;
 pub mod rbac;
 pub mod redact_rpl;
+pub mod renders;
 pub mod sessions;
 pub mod shares;
 pub mod sourcemaps;
@@ -44,6 +45,7 @@ pub struct ApiState {
     pub alerts: Option<Arc<replayd_alerts::Alerts>>,
     /// Bucket tier for finished recordings, D-37.
     pub replay_store: Option<Arc<replayd_objstore::ReplayStore>>,
+    pub renders: renders::Renders,
     login_ip: BucketMap<IpAddr>,
     login_email: BucketMap<u64>,
 }
@@ -67,6 +69,7 @@ impl ApiState {
             maps: None,
             alerts: None,
             replay_store: None,
+            renders: renders::Renders::new(data_dir.join("_renders")),
             data_dir,
             login_ip: BucketMap::new(50_000),
             login_email: BucketMap::new(50_000),
@@ -141,6 +144,16 @@ pub async fn audit(st: &ApiState, user: &Auth, action: &str, target: &str, data:
 }
 
 pub fn router(st: Arc<ApiState>) -> Router {
+    let weak = Arc::downgrade(&st);
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            let Some(st) = weak.upgrade() else {
+                break;
+            };
+            st.renders.sweep(&st.pool).await;
+        }
+    });
     Router::new()
         .route("/api/auth/login", post(login))
         .route("/api/auth/logout", post(logout))
@@ -191,6 +204,19 @@ pub fn router(st: Arc<ApiState>) -> Router {
         )
         .route("/api/public/shares/{token}", get(shares::detail))
         .route("/api/public/shares/{token}/recording", get(shares::recording))
+        .route(
+            "/api/sessions/{sid}/video",
+            get(renders::status).post(renders::start),
+        )
+        .route("/api/sessions/{sid}/video/download", get(renders::download))
+        .route(
+            "/api/public/shares/{token}/video",
+            get(renders::public_status).post(renders::public_start),
+        )
+        .route(
+            "/api/public/shares/{token}/video/download",
+            get(renders::public_download),
+        )
         .route("/api/projects/{pid}/releases", post(sourcemaps::create_release))
         .route(
             "/api/projects/{pid}/releases/{release}/sourcemaps",

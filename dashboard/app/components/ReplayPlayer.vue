@@ -448,6 +448,7 @@ onBeforeUnmount(() => {
     <p v-if="error" class="text-sm text-red-600">
       {{ error }}
     </p>
+    <ReplayDownload v-if="session" :endpoint="endpoint" />
 
     <div class="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
       <div class="flex min-w-0 flex-col gap-2">
