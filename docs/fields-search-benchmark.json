@@ -1,0 +1,120 @@
+{
+  "sessions": 140000,
+  "events": 140000,
+  "issues": 10000,
+  "days": 14,
+  "results": [
+    {
+      "kind": "sessions",
+      "query": "(unfiltered)",
+      "p50_ms": 8.18,
+      "p95_ms": 9.49,
+      "samples": 40
+    },
+    {
+      "kind": "sessions",
+      "query": "customer-65432",
+      "p50_ms": 43.46,
+      "p95_ms": 52.08,
+      "samples": 40
+    },
+    {
+      "kind": "sessions",
+      "query": "person-65432@example.test",
+      "p50_ms": 49.27,
+      "p95_ms": 55.77,
+      "samples": 40
+    },
+    {
+      "kind": "sessions",
+      "query": "Person 65432",
+      "p50_ms": 40.82,
+      "p95_ms": 45.85,
+      "samples": 40
+    },
+    {
+      "kind": "sessions",
+      "query": "192.0.2.43",
+      "p50_ms": 48.9,
+      "p95_ms": 56.69,
+      "samples": 40
+    },
+    {
+      "kind": "sessions",
+      "query": "version-7",
+      "p50_ms": 10.53,
+      "p95_ms": 13.12,
+      "samples": 40
+    },
+    {
+      "kind": "sessions",
+      "query": "missing-value",
+      "p50_ms": 39.79,
+      "p95_ms": 47.4,
+      "samples": 40
+    },
+    {
+      "kind": "sessions",
+      "query": "Person",
+      "p50_ms": 9.09,
+      "p95_ms": 11.6,
+      "samples": 40
+    },
+    {
+      "kind": "issues",
+      "query": "(unfiltered)",
+      "p50_ms": 15.06,
+      "p95_ms": 16.44,
+      "samples": 40
+    },
+    {
+      "kind": "issues",
+      "query": "customer-65432",
+      "p50_ms": 47.71,
+      "p95_ms": 57.53,
+      "samples": 40
+    },
+    {
+      "kind": "issues",
+      "query": "person-65432@example.test",
+      "p50_ms": 50.85,
+      "p95_ms": 58.08,
+      "samples": 40
+    },
+    {
+      "kind": "issues",
+      "query": "Person 65432",
+      "p50_ms": 46.11,
+      "p95_ms": 51.74,
+      "samples": 40
+    },
+    {
+      "kind": "issues",
+      "query": "192.0.2.43",
+      "p50_ms": 49.24,
+      "p95_ms": 55.91,
+      "samples": 40
+    },
+    {
+      "kind": "issues",
+      "query": "version-7",
+      "p50_ms": 58.89,
+      "p95_ms": 65.33,
+      "samples": 40
+    },
+    {
+      "kind": "issues",
+      "query": "missing-value",
+      "p50_ms": 45.99,
+      "p95_ms": 51.3,
+      "samples": 40
+    },
+    {
+      "kind": "issues",
+      "query": "Person",
+      "p50_ms": 13.72,
+      "p95_ms": 17.44,
+      "samples": 40
+    }
+  ]
+}

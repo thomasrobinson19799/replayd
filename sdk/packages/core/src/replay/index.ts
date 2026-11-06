@@ -226,7 +226,7 @@ function run(I: Internal) {
   };
 
   // ---- segments
-  let sid = '', seq = -1, init = 0, wsd = 0, stopped = 0;
+  let sid = '', seq = -1, init = 0, wsd = 0, stopped = 0, fv = -1, av: string | undefined;
   const N = navigator;
   const im = () => {
     const x = I.m(), a = (x.ctx.app ?? {}) as Record<string, string | undefined>;
@@ -234,7 +234,8 @@ function run(I: Internal) {
       url: location.href, ref: D.referrer, ua: N.userAgent, vw: W.innerWidth, vh: W.innerHeight, lang: N.language,
       release: o.release, env: o.environment, platform: I.platform, user: x.user, tags: x.tags,
       // Capacitor (T-26): filled by the capacitor chunk from App/Device.getInfo()
-      app_ver: a.version, device: a.device, os_ver: a.os, wv_ver: a.webview,
+      app_ver: o.appVersion ?? a.version, device: a.device, os_ver: a.os, wv_ver: a.webview,
+      ...I.clock?.(I.sess().st),
     };
   };
   const cut = (hide?: boolean) => {
@@ -249,7 +250,11 @@ function run(I: Internal) {
     const q = roll ? seq + 1 : ((sid = s.id), I.seq());
     const c = I.c.ws_disc, d = c >= wsd ? c - wsd : c;
     wsd = c;
-    w.postMessage([3, { sid, seq: q, ws_disc: d, ie: I.ie(), ...(init ? {} : { init: im() }) }, o.redact, !!hide]);
+    const x = I.m(), version = x.fields_version ?? 0, app = o.appVersion ?? (x.ctx.app as Record<string, string> | undefined)?.version;
+    const fields = !init || version !== fv || app !== av ? { user: x.user ?? null, custom_fields: x.custom_fields ?? {}, app_ver: app } : undefined;
+    w.postMessage([3, { sid, seq: q, ws_disc: d, ie: I.ie(), fields, ...(init ? {} : { init: im() }) }, o.redact, !!hide]);
+    fv = version;
+    av = app;
     seq = q;
     init = 1;
     if (roll) {

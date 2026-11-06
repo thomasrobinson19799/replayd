@@ -249,8 +249,8 @@ watch(pid, loadStats);
       <input
         v-model="filters.q"
         type="search"
-        aria-label="Search title or culprit"
-        placeholder="Search title or culprit"
+        aria-label="Search issues, identity or app version"
+        placeholder="Title, culprit, email, name, IP, user ID or app version"
         class="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1.5"
       >
       <select

@@ -28,7 +28,8 @@ const DAY_MS: i64 = 86_400_000;
 const COLS: &str = "id::text, project_id, (extract(epoch from started_at) * 1000)::bigint, \
     (extract(epoch from last_at) * 1000)::bigint, ended, duration_ms, entry_url, user_id, user_email, release, \
     environment, platform, app_version, device_model, os_version, webview_version, browser, browser_ver, os, vw, vh, \
-    lang, error_count, warn_count, click_count, ws_disconnects, segments, bytes, has_gap, file_day::text";
+    lang, error_count, warn_count, click_count, ws_disconnects, segments, bytes, has_gap, file_day::text, \
+    user_name, host(client_ip), timezone, local_time";
 
 pub(crate) fn session_json(r: &Row) -> Value {
     json!({
@@ -62,6 +63,11 @@ pub(crate) fn session_json(r: &Row) -> Value {
         "bytes": r.get::<_, i64>(27),
         "has_gap": r.get::<_, bool>(28),
         "file_day": r.get::<_, String>(29),
+        "user_name": r.get::<_, Option<String>>(30),
+        "client_ip": r.get::<_, Option<String>>(31),
+        "timezone": r.get::<_, Option<String>>(32),
+        "local_time": r.get::<_, Option<String>>(33),
+        "custom_fields": r.try_get::<_,Value>("custom_fields").ok(),
     })
 }
 
@@ -117,16 +123,12 @@ pub fn build_list(project_id: i32, q: &ListQuery) -> ApiResult<(String, Params)>
     );
     let mut p: Params = vec![Box::new(project_id), Box::new(from as f64), Box::new(to as f64)];
     if let Some(u) = q.user.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        if u.contains('@') {
-            add(
-                &mut sql,
-                &mut p,
-                " AND user_email = $?",
-                Box::new(u.to_ascii_lowercase()),
-            );
-        } else {
-            add(&mut sql, &mut p, " AND user_id = $?", Box::new(u.to_string()));
-        }
+        add(
+            &mut sql,
+            &mut p,
+            " AND (coalesce(user_id,'') || ' ' || coalesce(user_email,'') || ' ' || coalesce(user_name,'') || ' ' || coalesce(host(client_ip),'') || ' ' || coalesce(app_version,'')) ILIKE $?",
+            Box::new(like(u)),
+        );
     }
     if let Some(u) = q.url.as_deref().map(str::trim).filter(|s| s.len() >= 3) {
         add(&mut sql, &mut p, " AND urls ILIKE $?", Box::new(like(u)));
@@ -220,7 +222,7 @@ pub(crate) async fn load_public(st: &ApiState, sid: &str) -> ApiResult<Row> {
     let c = st.pool.get().await?;
     let r = c
         .query_opt(
-            &format!("SELECT {COLS} FROM sessions WHERE id = $1 LIMIT 1"),
+            &format!("SELECT {COLS}, custom_fields FROM sessions WHERE id = $1 LIMIT 1"),
             &[&id],
         )
         .await?
@@ -482,7 +484,8 @@ mod tests {
         };
         let (sql, p) = build_list(1, &q).unwrap();
         assert!(sql.contains("started_at >= to_timestamp($2"));
-        assert!(sql.contains("user_email = $4"));
+        assert!(sql.contains("coalesce(user_email,''"));
+        assert!(sql.contains("ILIKE $4"));
         assert!(sql.contains("urls ILIKE $5"));
         assert!(sql.contains("error_count > 0"));
         assert!(sql.contains("(started_at, id) < (to_timestamp($6::float8 / 1000), $7)"));

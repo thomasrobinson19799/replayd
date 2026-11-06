@@ -9,6 +9,8 @@ import { crumb, drain, rec, resetRing, setSink } from './ring';
 import { act, nextSeq, sInit, sSave, sampled, sess } from './session';
 import { flushEv, hdr, pump, reset, send, setLost, setTf, tf } from './transport';
 import { W, en, ie, offT, on, setOk, un } from './u';
+import { customFields, fieldsVersion, localClock } from './fields';
+export { setCustomFields } from './fields';
 import { resetWs, wsHooks, wsc } from './ws';
 
 export type * from './types';
@@ -30,7 +32,8 @@ const I: Internal = {
   send,
   ie: () => ie,
   c: wsc,
-  m: () => ({ user, tags, ctx }),
+  m: () => ({ user, tags, ctx, custom_fields: customFields, fields_version: fieldsVersion }),
+  clock: localClock,
   r: rec,
   b: crumb,
   h: () => hide(),

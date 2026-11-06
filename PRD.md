@@ -107,7 +107,7 @@ Reference low-end device for benchmarks: **mid-range Android phone running the A
 ```
 Browser / Capacitor WebView                Server (single Rust binary)                     Storage
 ┌────────────────────────────┐             ┌──────────────────────────────────┐
-│ @replayd/core (sync, 7KB)  │─events────▶ │ POST /ingest/:pid/events          │─batch─▶ Postgres (events, issues)
+│ @replayd/core (sync, 9KB)  │─events────▶ │ POST /ingest/:pid/events          │─batch─▶ Postgres (events, issues)
 │  errors, console, HTTP, WS │             │   └─ mpsc ─▶ event workers         │
 │  breadcrumbs, session      │             │       parse · symbolicate ·       │─────▶ Telegram (per project)
 │  remote config             │◀─config──── │ GET  /ingest/:pid/config          │
@@ -132,7 +132,7 @@ Single Rust process, bounded in-process channels, no Kafka/Redis/ClickHouse. T-6
 T-63 adds `setUser` name, `init.appVersion`, automatic timezone/local date-time with offset, and `setCustomFields`. Custom fields merge keys (null deletes), accept JSON to depth 8 and 16 KB, use existing recursive key redaction, and reject an oversized update atomically. Explicit appVersion overrides Capacitor detection. No new core runtime dependency.
 | Package | Contents |
 |---|---|
-| `@replayd/core` | `init`, `captureException`, `captureMessage`, `setUser`, `setTag(s)`, `setContext`, `addBreadcrumb`, `flush`, `close`; global handlers; console, fetch/XHR, **WebSocket** and history patching; session manager; transport; remote config; platform detection (web / capacitor-android) |
+| `@replayd/core` | `init`, `captureException`, `captureMessage`, `setUser`, `setCustomFields`, `setTag(s)`, `setContext`, `addBreadcrumb`, `flush`, `close`; global handlers; console, fetch/XHR, **WebSocket** and history patching; session manager; transport; remote config; platform detection (web / capacitor-android) |
 | `@replayd/core/replay` | Lazy chunk: `@rrweb/record`, batching, worker bridge |
 | `@replayd/core/canvas` | Lazy chunk: low-FPS canvas snapshotter |
 | `@replayd/core/capacitor` | Lazy chunk loaded only when `window.Capacitor` exists: app lifecycle hooks, device/app info, IndexedDB queue |
@@ -230,7 +230,7 @@ record({
 })
 ```
 - **Mutation guard:** batch > 10,000 nodes → new full snapshot instead (order book / history tables).
-- Custom events via `record.addCustomEvent`: `console`, `network`, `ws`, `error`, `nav`, `breadcrumb`, `app` (Capacitor lifecycle), `gap` (dropped data).
+- Custom events via `record.addCustomEvent`: `console`, `network`, `ws`, `error`, `nav`, `breadcrumb`, `app` (Capacitor lifecycle), `fields` (timestamped user/custom snapshots), `gap` (dropped data).
 - High-frequency DOM updates (price cells ticking in watchlist/order book) are the biggest replay cost. Provide `data-rp-throttle="500"` attribute: text mutations inside it are coalesced to at most one per N ms (implemented as rrweb mutation filter in our glue). Recommend it on watchlist and order-book containers.
 
 ### 4.7 Canvas snapshots (TradingView)
@@ -280,6 +280,11 @@ u16 meta_len | meta JSON
 u32 events_len | events (gzip JSON array of rrweb events)
 u16 asset_count | { u32 asset_id | u8 type (1=webp) | u32 len | bytes } × asset_count
 ```
+Metadata is capped at **32 KB** (D-49); custom fields remain capped at **16 KB**.
+The worker sends a complete `fields` snapshot on the first segment and whenever user,
+custom fields or app version changes. Omitted `fields` means unchanged; `user: null`
+and `custom_fields: {}` clear values. Aggregation persists the highest `fields_seq`,
+including across restarts and out-of-order delivery. The `init` clock is session start.
 `meta`:
 ```json
 {
@@ -288,7 +293,10 @@ u16 asset_count | { u32 asset_id | u8 type (1=webp) | u32 len | bytes } × asset
   "ws_disc":0,"canvas_bytes":28311,"gap":false,
   "init":{"url":"…","ref":"…","ua":"…","vw":412,"vh":915,"lang":"fa-IR","release":"1.42.0","env":"production",
           "platform":"capacitor-android","app_ver":"1.42.0 (142)","device":"SM-A525F","os_ver":"14","wv_ver":"130.0",
-          "user":{"id":"10023451"},"tags":{"brand":"fxglory"}}
+          "user":{"id":"10023451"},"tags":{"brand":"fxglory"},
+          "timezone":"Asia/Tehran","local_time":"2026-11-06 14:03:21 +03:30"},
+  "fields":{"user":{"id":"10023451","email":"person@example.test","name":"Jane"},
+            "custom_fields":{"plan":"pro"},"app_ver":"1.42.0"}
 }
 ```
 
@@ -306,7 +314,9 @@ Error event schema:
   "source":"onerror|unhandledrejection|console|http|ws|vue|react",
   "type":"TypeError","message":"…","stack":"raw",
   "url":"…","release":"1.42.0","env":"production","platform":"web|capacitor-android",
-  "user":{"id":"10023451"},"tags":{"brand":"fxglory"},
+  "user":{"id":"10023451","email":"person@example.test","name":"Jane"},"tags":{"brand":"fxglory"},
+  "app_version":"1.42.0","timezone":"Asia/Tehran","local_time":"2026-11-06 14:03:21 +03:30",
+  "custom_fields":{"plan":"pro"},
   "ctx":{"component":"OrderPanel","info":"mounted hook",
          "http":{"method":"POST","url":"…","status":500,"ms":231},
          "ws":{"url":"wss://…/connection/websocket","code":1006,"reconnects":4},
@@ -442,7 +452,10 @@ CREATE TABLE sessions (
   id uuid NOT NULL, project_id int NOT NULL,
   started_at timestamptz NOT NULL, last_at timestamptz NOT NULL, ended bool NOT NULL DEFAULT false,
   duration_ms int NOT NULL DEFAULT 0, entry_url text, urls text NOT NULL DEFAULT '',
-  user_id text, user_email text, release text, environment text,
+  user_id text, user_email text, user_name text, client_ip inet,
+  timezone text, local_time text, custom_fields jsonb NOT NULL DEFAULT '{}',
+  fields_seq bigint NOT NULL DEFAULT -1, ip_received_ms bigint NOT NULL DEFAULT 0,
+  release text, environment text,
   platform text NOT NULL DEFAULT 'web', app_version text, device_model text, os_version text, webview_version text,
   browser text, browser_ver text, os text, vw int, vh int, lang text, tags jsonb,
   error_count int NOT NULL DEFAULT 0, warn_count int NOT NULL DEFAULT 0, click_count int NOT NULL DEFAULT 0,
@@ -473,7 +486,8 @@ CREATE INDEX ON issues (project_id, status, last_seen DESC);
 CREATE TABLE events (
   id uuid NOT NULL, issue_id bigint NOT NULL, project_id int NOT NULL, ts timestamptz NOT NULL,
   session_id uuid, level text, release text, environment text, platform text,
-  url text, user_id text, browser text, os text, app_version text,
+  url text, user_id text, user_email text, user_name text, client_ip inet,
+  browser text, os text, app_version text,
   payload jsonb NOT NULL,
   PRIMARY KEY (id, ts)
 ) PARTITION BY RANGE (ts);
@@ -737,8 +751,8 @@ Decisions taken during implementation that refine or deviate from the PRD above.
 | D-36 | 2026-11-06 | Owner supplied a precise compact visual system for a styling-only dashboard update (UI-06), superseding D-33 plum colors. Use the supplied dark/light semantic tokens and system typography while preserving the existing theme selection, framework, behavior, copy, API/data handling and tests. No dependencies, fonts or commits. | Explicit owner brief; native select popups and fixed replay virtualization geometry remain unchanged. Verification: docs/ui-06-restyle.md. |
 | D-37 | 2026-11-06 | Owner chose bucket storage for replays (T-55), deviating from "Local disk" in §1: Sentry on the same host already keeps its replays in Hetzner Object Storage and the local disk is 92% full. Optional and off by default. Only **finished** recordings move: appends and the ≤ 1 s crash-loss guarantee still need a real disk, Postgres and source maps stay local. A file untouched for 20 min (longer than the 15 min session end) is uploaded and its size verified; the shard writer, as the file's only writer, then removes it only if its length is unchanged, so a frame cannot be lost to the removal. Late segments start a new local file and are merged into the object by `seq` (first copy wins, a truncated object tail is cut). Reads go through a local cache (`data/_cache/`, 2 GB, 24 h) so `Range`, `ETag` and viewer redaction keep working on plain files; an object is downloaded whole on first play. All keys live under `replays/`: Sentry's replay keys have numeric top-level folders, the same shape as project ids, so retention must never list or delete outside that prefix. Retention skips the bucket when the database has no projects at all. Client: `object_store` 0.12 (same `reqwest`/`ring` as the server; 0.14 adds `aws-lc-rs`, which needs cmake on musl), path-style URLs. Memory stays bounded: 4 uploads × 8 MB part buffer, merges hold one frame. New metrics `replayd_objstore_uploads_total{result}`, `replayd_objstore_upload_bytes_total`, `replayd_objstore_pending_files`. Setup and limits: docs/object-storage.md. |
 
-| D-38 | 2026-11-06 | Owner approves storing real client IP on sessions and events, resolved from connection/trusted-proxy X-Forwarded-For, no GeoIP. New identity fields include name, app version, timezone/local date-time, redacted JSON custom fields and timestamped field history. Latest session values only are searchable; issues match retained events. | Accepted implementation plan §3.4/3.8; SDK/server implementation T-63 pending. |
-| D-39 | 2026-11-06 | Owner approves a separate Chromium/ffmpeg service for H.264 MP4 output, 2 running/10 waiting, 24-hour output retention, 10 new public renders/hour/IP, shared job reuse and live-session snapshots. Live players append new bytes until session end. Owner follow-up permits at most one pixel of padding per odd dimension for compatible H.264 output, without resizing the recorded page. | Accepted plan §3.2/3.8 and explicit compatibility choice; T-61 pending. |
+| D-38 | 2026-11-06 | Owner approves storing real client IP on sessions and events, resolved from connection/trusted-proxy X-Forwarded-For, no GeoIP. New identity fields include name, app version, timezone/local date-time, redacted JSON custom fields and timestamped field history. Latest session values only are searchable; issues match retained events. | Accepted implementation plan §3.4/3.8; SDK/server implementation and acceptance: docs/t-63-fields.md. |
+| D-39 | 2026-11-06 | Owner approves a separate Chromium/ffmpeg service for H.264 MP4 output, 2 running/10 waiting, 24-hour output retention, 10 new public renders/hour/IP, shared job reuse and live-session snapshots. Live players append new bytes until session end. Owner follow-up permits at most one pixel of padding per odd dimension for compatible H.264 output, without resizing the recorded page. | Accepted plan §3.2/3.8 and explicit compatibility choice; T-61 complete. |
 | D-40 | 2026-11-06 | Public secret per-session links expose full captured data to anyone holding the link, including when created by viewers. Authenticated viewers remain filtered. All roles create/revoke; tokens are SHA-256 hashed and shown once, expiry is capped by retention and checked against current retention/session existence on every read. Create/revoke audit entries contain only link/session IDs. Public routes omit access logs and set no-store/noindex/no-referrer; optional dashboard IP restrictions exempt public routes and static assets. | Explicit owner choice S1–S9; T-60. |
 | D-41 | 2026-11-06 | Owner raises core and IIFE gzip limits from 7 KB to 9 KB; every other size/performance limit remains unchanged. | Accepted plan F15; apply size configuration in T-63. |
 | D-42 | 2026-11-06 | Owner requests T-60…T-67 on one cumulative local branch, one task commit series, following the accepted plan. UI-06 baseline is already committed as c8a4e7a, with screenshot follow-up e17ec9f. Header-only redesign, Copy stack, network filters and fullscreen keep UI-06 tokens. Ignore rules are server-only and leave replay/session counts unchanged. No push/deployment. | Supersedes one-task-per-branch and UI-06 no-commit instruction for this owner-authorized delivery. Full specification: docs/sharing-fields-plan.md. |
@@ -748,3 +762,5 @@ Decisions taken during implementation that refine or deviate from the PRD above.
 | D-46 | 2026-11-06 | Issue header shows first/last seen, first/latest releases and platforms. Resolve remains primary, next-release and Ignore actions use menus, Play replay/Copy stack are adjacent, and Copy link/Delete move to More. Preserve UI-06 tokens and all body layouts. | T-65, accepted H1–H5; dark/light 1440/1024/525 px and pointer/keyboard checks. |
 | D-47 | 2026-11-06 | Network metadata distinguishes fetch/XHR; Method, Status, Type and Slower than combine with AND plus existing text/Failed only. Clear resets dropdowns. Older untyped requests match only All types. Viewer filtering preserves request type. | T-66, accepted N1–N4; no body/redaction changes. |
 | D-48 | 2026-11-06 | Fullscreen targets the replay/timeline/controls only, proportionally upscales within remaining screen space and centers with bars. Fullscreen-change/Escape synchronize sizing and button state; normal sizing is preserved. Shared player applies this to public and authenticated views. | T-67, accepted FS1–FS3; before/after measurements and native pointer/keyboard checks in Chrome and Edge. |
+
+| D-49 | 2026-11-06 | Owner approves raising only the replay metadata envelope from 16 KiB to 32 KiB so the full 16 KiB custom-field allowance fits. Changed segments carry complete user/custom/app-version snapshots; highest segment sequence persists across restarts and out-of-order delivery. Compressed replay, queue and performance limits remain unchanged. | Explicit owner answer: “Raise metadata limit to 32 KB”; T-63. |

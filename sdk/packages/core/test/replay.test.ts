@@ -64,9 +64,10 @@ const cuts = () => posted.filter((m) => m[0] === 3).map((m) => m[1] as Record<st
 const micro = () => vi.advanceTimersByTimeAsync(0);
 
 let live: Ctl[] = [];
-async function start(ring?: RingEvent[]) {
+async function start(ring?: RingEvent[], appVersion?: string) {
   vi.resetModules();
   const c = internal(ring);
+  if (appVersion) { const options = c.I.o(); c.I.o = () => ({ ...options, appVersion }); }
   live.push(c);
   const { startReplay } = await import('../src/replay/index');
   startReplay(c.I);
@@ -74,6 +75,25 @@ async function start(ring?: RingEvent[]) {
 }
 
 describe('replay chunk (main thread)', () => {
+  it('sends changed complete fields, explicit app version and the session-start clock', async () => {
+    const c = await start(undefined, 'explicit-2');
+    let version = 1;
+    let user: { id: string, name: string } | undefined = { id: 'u1', name: 'Jane' };
+    let custom: Record<string, unknown> = { plan: 'pro' };
+    c.I.m = () => ({ user, custom_fields: custom, fields_version: version, tags: {}, ctx: { app: { version: 'native-1' } } });
+    c.I.clock = vi.fn(() => ({ timezone: 'Asia/Tehran', local_time: '2026-11-06 14:03:21 +03:30' }));
+    await vi.advanceTimersByTimeAsync(1000);
+    window.dispatchEvent(new Event('replayd:flush'));
+    expect(cuts().at(-1)).toMatchObject({ fields: { user, custom_fields: custom, app_ver: 'explicit-2' }, init: { app_ver: 'explicit-2', timezone: 'Asia/Tehran' } });
+    expect(c.I.clock).toHaveBeenCalledWith(c.S.st);
+    c.sink?.({ type: 'console', ts: Date.now(), data: { level: 'log', args: ['unchanged'] } });
+    window.dispatchEvent(new Event('replayd:flush'));
+    expect(cuts().at(-1)?.fields).toBeUndefined();
+    user = undefined; custom = {}; version++;
+    c.sink?.({ type: 'fields', ts: Date.now(), data: { field: 'user', value: null } });
+    window.dispatchEvent(new Event('replayd:flush'));
+    expect(cuts().at(-1)).toMatchObject({ fields: { user: null, custom_fields: {} } });
+  });
   beforeEach(() => {
     posted = [];
     workers = [];

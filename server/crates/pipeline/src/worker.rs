@@ -209,14 +209,16 @@ pub fn process_job(sh: &Shared, job: &EventJob) -> Vec<Processed> {
             )
         })
         .map(|e| {
-            event::process_with(
+            let mut processed = event::process_with(
                 e,
                 job.project_id,
                 job.received_ms as i64,
                 &ua,
                 &rules,
                 sh.maps.as_deref(),
-            )
+            );
+            processed.client_ip = job.client_ip;
+            processed
         })
         .collect();
     out
@@ -295,6 +297,9 @@ const EVENT_COLUMNS: &[&str] = &[
     "os",
     "app_version",
     "payload",
+    "user_email",
+    "user_name",
+    "client_ip",
 ];
 const EVENT_TYPES: &[Type] = &[
     Type::UUID,
@@ -312,6 +317,9 @@ const EVENT_TYPES: &[Type] = &[
     Type::TEXT,
     Type::TEXT,
     Type::JSONB,
+    Type::TEXT,
+    Type::TEXT,
+    Type::INET,
 ];
 
 /// Writes a batch: one upsert per distinct issue (sorted → no deadlocks between workers), user counters,
@@ -484,6 +492,9 @@ pub async fn flush(sh: &Shared, batch: &mut Vec<Processed>) -> Result<usize, rep
                 &p.os,
                 &p.app_version,
                 &p.payload,
+                &p.user_email,
+                &p.user_name,
+                &p.client_ip,
             ];
             v
         })

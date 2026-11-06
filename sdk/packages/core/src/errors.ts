@@ -1,16 +1,14 @@
 /** Error capture pipeline (PRD §4.11): filters, sampling, flood control, event building, global handlers. */
-import type { ReplaydEvent, User } from './types';
+import type { ReplaydEvent } from './types';
 import { O } from './config';
 import { crumbs, rec } from './ring';
-import { rUrl } from './redact';
+import { rJson, rUrl } from './redact';
+import { user, customFields, localClock } from './fields';
+export { user, setUser } from './fields';
 import { sess } from './session';
 import { pushEv } from './transport';
 import { W, en, err, match, now, on, uuid7 } from './u';
 
-export let user: User | undefined;
-export const setUser = (u?: User) => {
-  user = u;
-};
 export const tags: Record<string, string> = {};
 export const ctx: Record<string, unknown> = {};
 export let platform: ReplaydEvent['platform'] = 'web';
@@ -72,6 +70,9 @@ export const capture = (level: Lv, source: Src, type: string, message: string, s
       env: O.environment,
       platform,
       user,
+      app_version: O.appVersion ?? (ctx.app as { version?: string } | undefined)?.version,
+      ...localClock(t),
+      custom_fields: rJson(customFields) as Record<string, unknown>,
       tags: { ...tags },
       ctx: { ...ctx, ...c },
       breadcrumbs: crumbs.slice(),

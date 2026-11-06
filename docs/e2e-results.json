@@ -12,7 +12,7 @@
   {
     "suite": "issue-status",
     "exit": 0,
-    "seconds": 8
+    "seconds": 7
   },
   {
     "suite": "issue-header",
@@ -27,7 +27,7 @@
   {
     "suite": "sourcemaps",
     "exit": 0,
-    "seconds": 5
+    "seconds": 4
   },
   {
     "suite": "remote-config",
@@ -37,12 +37,12 @@
   {
     "suite": "adapters",
     "exit": 0,
-    "seconds": 46
+    "seconds": 35
   },
   {
     "suite": "player",
     "exit": 0,
-    "seconds": 49
+    "seconds": 47
   },
   {
     "suite": "network-filters",
@@ -57,42 +57,37 @@
   {
     "suite": "sharing",
     "exit": 0,
-    "seconds": 48
+    "seconds": 49
   },
   {
     "suite": "video",
     "exit": 0,
-    "seconds": 28
+    "seconds": 30
   },
   {
     "suite": "ignore-rules",
     "exit": 0,
-    "seconds": 7
+    "seconds": 4
+  },
+  {
+    "suite": "fields",
+    "exit": 0,
+    "seconds": 27
   },
   {
     "suite": "alerts",
     "exit": 0,
-    "seconds": 18
+    "seconds": 19
   },
   {
     "suite": "observability",
     "exit": 0,
-    "seconds": 29,
-    "attempts": [
-      {
-        "exit": 1,
-        "seconds": 27
-      },
-      {
-        "exit": 0,
-        "seconds": 29
-      }
-    ]
+    "seconds": 40
   },
   {
     "suite": "wordpress",
     "exit": 0,
-    "seconds": 69
+    "seconds": 67
   },
   {
     "suite": "dashboard",
@@ -102,6 +97,6 @@
   {
     "suite": "object-storage",
     "exit": 0,
-    "seconds": 147
+    "seconds": 141
   }
 ]

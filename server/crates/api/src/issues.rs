@@ -74,6 +74,7 @@ pub async fn list(
     user.require(&st, id, Perm::View)?;
     let mut sql = format!("SELECT {ISSUE_COLS} FROM issues WHERE project_id = $1");
     let mut params: Vec<Box<dyn ToSql + Sync + Send>> = vec![Box::new(id)];
+    let mut search_probe = None;
     // `cond` uses `$?` for the (single) new parameter; it may appear more than once.
     fn add(sql: &mut String, params: &mut Vec<Box<dyn ToSql + Sync + Send>>, cond: &str, v: String) {
         params.push(Box::new(v));
@@ -110,6 +111,11 @@ pub async fn list(
         );
     }
     if let Some(text) = q.q.filter(|s| !s.trim().is_empty()) {
+        let retention = st
+            .projects
+            .get(&id.to_string())
+            .map(|p| p.row.retention_days)
+            .unwrap_or(14);
         let like = format!(
             "%{}%",
             text.trim()
@@ -117,10 +123,20 @@ pub async fn list(
                 .replace('%', "\\%")
                 .replace('_', "\\_")
         );
+        let identity = format!(
+            "e.project_id=$1 AND e.ts >= ((now() AT TIME ZONE 'UTC')::date - {retention} + 1)::timestamp AT TIME ZONE 'UTC' AND (coalesce(e.user_id,'') || ' ' || coalesce(e.user_email,'') || ' ' || coalesce(e.user_name,'') || ' ' || coalesce(host(e.client_ip),'') || ' ' || coalesce(e.app_version,'')) ILIKE $?"
+        );
+        let candidates = sql.replacen(&format!("SELECT {ISSUE_COLS}"), "SELECT *", 1);
+        let probe_filter = format!(
+            "title ILIKE $? OR culprit ILIKE $? OR EXISTS (SELECT 1 FROM events e WHERE e.issue_id=issues.id AND {identity} OFFSET 0)"
+        ).replace("$?", &format!("${}", params.len() + 1));
+        search_probe = Some((candidates, probe_filter));
         add(
             &mut sql,
             &mut params,
-            " AND (title ILIKE $? OR culprit ILIKE $?)",
+            &format!(
+                " AND (title ILIKE $? OR culprit ILIKE $? OR id IN (SELECT DISTINCT e.issue_id FROM events e WHERE {identity}))"
+            ),
             like,
         );
     }
@@ -138,7 +154,32 @@ pub async fn list(
     ));
     let c = st.pool.get().await?;
     let refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|b| b.as_ref() as &(dyn ToSql + Sync)).collect();
-    let rows = c.query(&sql, &refs).await?;
+    // Polling asks for page zero. Probe a bounded prefix in the requested order so
+    // common identities need not scan every retained event. Sparse matches always
+    // fall back to the indexed full search; no result or pagination is truncated.
+    let mut probed = None;
+    if page == 0
+        && let Some((candidates, filter)) = search_probe
+    {
+        for limit in [128, 2048] {
+            let query = format!(
+                "SELECT {ISSUE_COLS} FROM ({candidates} ORDER BY {order} LIMIT {limit}) issues WHERE {filter} ORDER BY {order} LIMIT {}",
+                PAGE + 1
+            );
+            let rows = c.query(&query, &refs).await?;
+            if rows.len() as i64 > PAGE {
+                probed = Some(rows);
+                break;
+            }
+            if rows.len() < 4 {
+                break;
+            }
+        }
+    }
+    let rows = match probed {
+        Some(rows) => rows,
+        None => c.query(&sql, &refs).await?,
+    };
     let has_more = rows.len() as i64 > PAGE;
     let issues: Vec<Value> = rows.iter().take(PAGE as usize).map(issue_json).collect();
     Ok(Json(
@@ -157,7 +198,7 @@ async fn load_issue(st: &ApiState, user: &Auth, id: i64) -> ApiResult<Row> {
 }
 
 const EVENT_COLS: &str = "id::text, (extract(epoch from ts) * 1000)::bigint, session_id::text, level, release, \
-    environment, platform, url, user_id, browser, os, app_version, payload";
+    environment, platform, url, user_id, browser, os, app_version, payload, user_email, user_name, host(client_ip)";
 
 fn event_json(r: &Row) -> Value {
     json!({
@@ -174,6 +215,9 @@ fn event_json(r: &Row) -> Value {
         "os": r.get::<_, Option<String>>(10),
         "app_version": r.get::<_, Option<String>>(11),
         "payload": r.get::<_, Value>(12),
+        "user_email": r.get::<_, Option<String>>(13),
+        "user_name": r.get::<_, Option<String>>(14),
+        "client_ip": r.get::<_, Option<String>>(15),
     })
 }
 

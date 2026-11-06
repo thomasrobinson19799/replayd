@@ -37,12 +37,19 @@ pub struct EventJob {
     /// gzip JSON array or plain JSON array of error events (§4.11).
     pub body: Bytes,
     pub user_agent: Option<String>,
+    pub client_ip: Option<IpAddr>,
 }
 
 /// Receives validated replay segments (implemented by the storage writer, T-21).
 pub trait ReplaySink: Send + Sync + 'static {
     /// Must not block. `Err(retry_after_secs)` when the writer queue is full.
-    fn submit(&self, project: &Project, body: Bytes, received_ms: u64) -> Result<(), ReplayReject>;
+    fn submit(
+        &self,
+        project: &Project,
+        body: Bytes,
+        received_ms: u64,
+        client_ip: IpAddr,
+    ) -> Result<(), ReplayReject>;
 }
 
 #[derive(Debug)]
@@ -144,6 +151,7 @@ fn now_ms() -> u64 {
 struct Gate {
     project: Arc<Project>,
     origin: Option<HeaderValue>,
+    client_ip: IpAddr,
 }
 
 fn status(code: StatusCode) -> Response {
@@ -189,6 +197,7 @@ fn gate(
     }
     // Only echo a real origin (not "null").
     let origin = origin_hv.filter(|o| o.as_bytes() != b"null");
+    let client_ip = client_ip::client_ip(peer, headers, &st.trusted_proxies);
     if rate_limit {
         let now = Instant::now();
         let c = &st.cfg;
@@ -199,12 +208,15 @@ fn gate(
         {
             return Err(with_cors(retry_after(StatusCode::TOO_MANY_REQUESTS, s), &origin));
         }
-        let ip = client_ip::client_ip(peer, headers, &st.trusted_proxies);
-        if let Err(s) = st.limits.ips.take(ip, c.ip_rps, c.ip_burst, now) {
+        if let Err(s) = st.limits.ips.take(client_ip, c.ip_rps, c.ip_burst, now) {
             return Err(with_cors(retry_after(StatusCode::TOO_MANY_REQUESTS, s), &origin));
         }
     }
-    Ok(Gate { project, origin })
+    Ok(Gate {
+        project,
+        origin,
+        client_ip,
+    })
 }
 
 fn record(project: &str, kind: &'static str, code: StatusCode, started: Instant, bytes: usize) {
@@ -291,6 +303,7 @@ async fn events(
         received_ms: now_ms(),
         body,
         user_agent: ua,
+        client_ip: Some(g.client_ip),
     };
     let resp = match st.events_tx.try_send(job) {
         Ok(()) => accepted(&g.origin),
@@ -334,7 +347,7 @@ async fn replay(
         }
     };
     let n = body.len();
-    let resp = match sink.submit(&g.project, body, now_ms()) {
+    let resp = match sink.submit(&g.project, body, now_ms(), g.client_ip) {
         Ok(()) => accepted(&g.origin),
         Err(ReplayReject::Busy) => {
             metrics::counter!("replayd_queue_rejected_total", "queue" => "replay").increment(1);

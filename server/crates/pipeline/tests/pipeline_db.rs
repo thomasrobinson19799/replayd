@@ -73,7 +73,7 @@ async fn groups_web_and_apk_and_writes_events() {
     ];
     let mut batch = vec![];
     for j in &jobs {
-        let job = EventJob { project_id: pid, received_ms: now, body: gz(j), user_agent: Some("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36".into()) };
+        let job = EventJob { project_id: pid, received_ms: now, body: gz(j), client_ip: Some("192.0.2.10".parse().unwrap()), user_agent: Some("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36".into()) };
         batch.extend(worker::process_job(&sh, &job));
     }
     // plain (non-gzip) JSON bodies are accepted too
@@ -93,6 +93,7 @@ async fn groups_web_and_apk_and_writes_events() {
                 .to_string(),
             ),
             user_agent: None,
+            client_ip: Some("192.0.2.10".parse().unwrap()),
         },
     ));
     assert_eq!(batch.len(), 5);
@@ -146,6 +147,7 @@ async fn groups_web_and_apk_and_writes_events() {
                 "Cannot read 'price' of order 6"
             )])),
             user_agent: None,
+            client_ip: Some("192.0.2.10".parse().unwrap()),
         },
     ));
     worker::flush(&sh, &mut batch).await.unwrap();
@@ -168,6 +170,7 @@ async fn groups_web_and_apk_and_writes_events() {
         received_ms: now,
         body: retry,
         user_agent: None,
+        client_ip: Some("192.0.2.10".parse().unwrap()),
     };
     let first = worker::process_job(&sh, &job);
     assert_eq!(first.len(), 1);
@@ -247,6 +250,7 @@ async fn ignore_rules_drop_only_new_issue_events_and_flush_counters() {
             received_ms: now,
             body: gz(&json!(events)),
             user_agent: None,
+            client_ip: Some("192.0.2.10".parse().unwrap()),
         }
     };
     let mut before = worker::process_job(&sh, &make());

@@ -184,6 +184,94 @@ async fn rbac_matrix_over_http() {
 
     use StatusCode as S;
     let p = format!("/api/projects/{pid}");
+    c.execute("UPDATE sessions SET user_id='identity-one',user_email='first@example.test',user_name='First Person',client_ip='192.0.2.44',app_version='app-field-7',timezone='Asia/Tehran',local_time='2026-11-06 14:03:21 +03:30',custom_fields='{\"plan\":\"pro\"}' WHERE id=$1", &[&sid]).await.unwrap();
+    let field_event = uuid::Uuid::now_v7();
+    c.execute("INSERT INTO events (id,issue_id,project_id,ts,session_id,user_id,user_email,user_name,client_ip,app_version,payload) VALUES ($1,$2,$3,now(),$4,'identity-one','first@example.test','First Person','192.0.2.44','app-field-7','{\"custom_fields\":{\"plan\":\"pro\"}}')", &[&field_event,&iid,&pid,&sid]).await.unwrap();
+    for session in &sessions[..4] {
+        let (code, detail) = call(
+            &app,
+            Some(session),
+            Method::GET,
+            &format!("/api/sessions/{sid}"),
+            None,
+            true,
+        )
+        .await;
+        assert_eq!(code, S::OK);
+        assert_eq!(detail["user_name"], "First Person");
+        assert_eq!(detail["client_ip"], "192.0.2.44");
+        assert_eq!(detail["custom_fields"]["plan"], "pro");
+        let (_, detail) = call(
+            &app,
+            Some(session),
+            Method::GET,
+            &format!("/api/issues/{iid}"),
+            None,
+            true,
+        )
+        .await;
+        assert_eq!(detail["latest_event"]["client_ip"], "192.0.2.44");
+        assert_eq!(detail["latest_event"]["user_email"], "first@example.test");
+        for needle in [
+            "identity-one",
+            "first%40example.test",
+            "First%20Person",
+            "192.0.2.44",
+            "app-field-7",
+        ] {
+            let (_, rows) = call(
+                &app,
+                Some(session),
+                Method::GET,
+                &format!("{p}/sessions?user={needle}"),
+                None,
+                true,
+            )
+            .await;
+            assert_eq!(rows["sessions"].as_array().unwrap().len(), 1);
+            let (_, rows) = call(
+                &app,
+                Some(session),
+                Method::GET,
+                &format!("{p}/issues?q={needle}"),
+                None,
+                true,
+            )
+            .await;
+            assert_eq!(rows["issues"].as_array().unwrap().len(), 1);
+        }
+    }
+    c.execute("UPDATE sessions SET user_id='identity-two',user_email='second@example.test',user_name='Second Person' WHERE id=$1", &[&sid]).await.unwrap();
+    let (_, rows) = call(
+        &app,
+        Some(&sessions[3]),
+        Method::GET,
+        &format!("{p}/sessions?user=identity-one"),
+        None,
+        true,
+    )
+    .await;
+    assert!(
+        rows["sessions"].as_array().unwrap().is_empty(),
+        "session search uses latest values only"
+    );
+    let (_, rows) = call(
+        &app,
+        Some(&sessions[3]),
+        Method::GET,
+        &format!("{p}/issues?q=identity-one"),
+        None,
+        true,
+    )
+    .await;
+    assert_eq!(
+        rows["issues"].as_array().unwrap().len(),
+        1,
+        "issue search uses retained event identity"
+    );
+    c.execute("DELETE FROM events WHERE id=$1", &[&field_event])
+        .await
+        .unwrap();
     let cases: Vec<(Method, String, Option<Value>, [S; 5])> = vec![
         (
             Method::GET,

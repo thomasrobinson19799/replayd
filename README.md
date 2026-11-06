@@ -54,6 +54,27 @@ Build an installable WordPress plugin with `python scripts/package-wordpress.py`
 is written to `data/releases/` and contains the plugin files without its tests. Upload it
 through WordPress's plugin installer; configure its DSN and release in WordPress settings.
 
+### Identity and custom fields
+
+Sessions show the latest identity and custom fields; the replay Device tab preserves
+timestamped changes and seeks when an entry is selected. Issues retain each event's values.
+
+```ts
+import { init, setUser, setCustomFields } from '@replayd/core'
+
+init({ dsn: 'https://<publicKey>@replay.example.com/<project>', appVersion: '2.4.1' })
+setUser({ id: 'customer-123', email: 'person@example.test', name: 'Jane' })
+setCustomFields({ plan: 'pro', preferences: { language: 'en' } })
+setCustomFields({ plan: null }) // remove a top-level key
+setUser() // clear identity at logout
+```
+
+Custom fields are separate from tags. Updates merge top-level keys; null removes a key.
+Values must be JSON, at most eight object/array levels and 16 KB total after recursive
+key redaction. Invalid or oversized updates leave the prior snapshot intact. Script-tag
+users call `Replayd.setUser`/`Replayd.setCustomFields`; auto-init accepts
+`data-app-version`. Explicit app version takes precedence over Capacitor's detected version.
+
 ## Development checks
 
 ```sh

@@ -15,6 +15,8 @@ pub struct InUser {
     pub id: Option<Value>,
     #[serde(default)]
     pub email: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -53,6 +55,14 @@ pub struct InEvent {
     pub breadcrumbs: Option<Vec<Value>>,
     #[serde(default)]
     pub count: Option<u32>,
+    #[serde(default)]
+    pub app_version: Option<String>,
+    #[serde(default)]
+    pub timezone: Option<String>,
+    #[serde(default)]
+    pub local_time: Option<String>,
+    #[serde(default)]
+    pub custom_fields: Option<Value>,
 }
 
 const SOURCES: &[&str] = &[
@@ -85,6 +95,9 @@ pub struct Processed {
     pub platform: String,
     pub url: Option<String>,
     pub user_id: Option<String>,
+    pub user_email: Option<String>,
+    pub user_name: Option<String>,
+    pub client_ip: Option<std::net::IpAddr>,
     pub browser: Option<String>,
     pub os: Option<String>,
     pub app_version: Option<String>,
@@ -207,9 +220,14 @@ pub fn process_with(
         Some(Value::Number(n)) => Some(n.to_string()),
         _ => None,
     });
-    let app_version = str_at(&e.ctx, "app", "version")
-        .and_then(Value::as_str)
-        .map(str::to_string);
+    let app_version = clip(
+        e.app_version.clone().or_else(|| {
+            str_at(&e.ctx, "app", "version")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        }),
+        256,
+    );
     let platform = match e.platform.as_deref() {
         Some("capacitor-android") => "capacitor-android",
         _ => "web",
@@ -226,6 +244,16 @@ pub fn process_with(
         breadcrumbs.drain(..n - MAX_BREADCRUMBS);
     }
     let mut payload = Map::new();
+    payload.insert("received_at".into(), Value::from(received_ms));
+    if let Some(zone) = clip(e.timezone, 128) {
+        payload.insert("timezone".into(), Value::String(zone));
+    }
+    if let Some(local) = clip(e.local_time, 64) {
+        payload.insert("local_time".into(), Value::String(local));
+    }
+    if let Some(custom) = e.custom_fields.filter(replayd_common::fields::valid_custom) {
+        payload.insert("custom_fields".into(), custom);
+    }
     payload.insert("message".into(), Value::String(message));
     if let Some(t) = &e.ty {
         payload.insert("type".into(), Value::String(t.clone()));
@@ -250,6 +278,9 @@ pub fn process_with(
         if let Some(em) = &u.email {
             um.insert("email".into(), Value::String(em.clone()));
         }
+        if let Some(name) = &u.name {
+            um.insert("name".into(), Value::String(name.clone()));
+        }
         payload.insert("user".into(), Value::Object(um));
     }
     if let Some(v) = &ua.browser_ver {
@@ -259,6 +290,9 @@ pub fn process_with(
     Processed {
         id,
         project_id,
+        user_email: clip(e.user.as_ref().and_then(|u| u.email.clone()), 512),
+        user_name: clip(e.user.as_ref().and_then(|u| u.name.clone()), 512),
+        client_ip: None,
         ts_ms,
         session_id: e.sid.as_deref().and_then(|s| Uuid::try_parse(s).ok()),
         level,
@@ -313,6 +347,38 @@ mod tests {
         assert_eq!(p.payload["frames"][0]["path"], "~/_nuxt/OrderPanel.js");
         assert_eq!(p.payload["frames"][0]["in_app"], true);
         assert_eq!(p.title, "TypeError: x is undefined");
+    }
+
+    #[test]
+    fn identity_clock_and_custom_fields_survive_processing() {
+        let input = json!({"user":{"id":"customer-1","email":"person@example.test","name":"Jane"},
+            "app_version":"explicit-2", "ctx":{"app":{"version":"native-1"}},
+            "timezone":"Asia/Tehran", "local_time":"2026-11-06 14:03:21 +03:30",
+            "custom_fields":{"plan":"pro","nested":{"password":"[Filtered]"}}});
+        let p = process(
+            serde_json::from_value(input).unwrap(),
+            1,
+            1730620002000,
+            &Ua::default(),
+            &[],
+        );
+        assert_eq!(p.user_email.as_deref(), Some("person@example.test"));
+        assert_eq!(p.user_name.as_deref(), Some("Jane"));
+        assert_eq!(p.app_version.as_deref(), Some("explicit-2"));
+        assert_eq!(p.payload["user"]["name"], "Jane");
+        assert_eq!(p.payload["timezone"], "Asia/Tehran");
+        assert_eq!(p.payload["local_time"], "2026-11-06 14:03:21 +03:30");
+        assert_eq!(p.payload["received_at"], 1730620002000_i64);
+        assert_eq!(p.payload["custom_fields"]["plan"], "pro");
+        let oversized = json!({"custom_fields":{"value":"x".repeat(16384)}});
+        let p = process(
+            serde_json::from_value(oversized).unwrap(),
+            1,
+            1730620002000,
+            &Ua::default(),
+            &[],
+        );
+        assert!(p.payload.get("custom_fields").is_none());
     }
 
     #[test]

@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use replayd_common::wire::{SegmentInit, SegmentMeta};
+use replayd_common::wire::{SegmentFields, SegmentInit, SegmentMeta};
 use replayd_db::Pool;
 use replayd_db::tokio_postgres::types::{ToSql, Type};
 use tokio::sync::mpsc;
@@ -29,6 +29,8 @@ pub struct SegmentInfo {
     pub file_day: String,
     pub meta: SegmentMeta,
     pub bytes: u64,
+    pub client_ip: Option<std::net::IpAddr>,
+    pub received_ms: i64,
 }
 
 #[derive(Default)]
@@ -41,6 +43,9 @@ struct Agg {
     seqs: HashSet<u32>,
     urls_seen: Vec<String>,
     init: Option<SegmentInit>,
+    fields: Option<(u32, SegmentFields)>,
+    client_ip: Option<std::net::IpAddr>,
+    ip_received_ms: i64,
     // pending deltas
     d_urls: Vec<String>,
     d_errs: i32,
@@ -86,6 +91,10 @@ impl Aggregator {
         if !a.seqs.insert(s.meta.seq) {
             return; // duplicate segment (retry)
         }
+        if s.received_ms >= a.ip_received_ms {
+            a.client_ip = s.client_ip;
+            a.ip_received_ms = s.received_ms;
+        }
         let m = s.meta;
         a.last_ms = a.last_ms.max(m.t1 as i64).max(m.t0 as i64);
         for u in m.urls {
@@ -93,6 +102,19 @@ impl Aggregator {
                 a.urls_seen.push(u.clone());
                 a.d_urls.push(u);
             }
+        }
+        let fields = m.fields.or_else(|| {
+            m.init.as_ref().map(|i| SegmentFields {
+                user: i.user.clone(),
+                custom_fields: serde_json::json!({}),
+                app_ver: i.app_ver.clone(),
+            })
+        });
+        if let Some(fields) = fields
+            && replayd_common::fields::valid_custom(&fields.custom_fields)
+            && a.fields.as_ref().is_none_or(|(seq, _)| m.seq > *seq)
+        {
+            a.fields = Some((m.seq, fields));
         }
         if let Some(init) = m.init
             && a.init.is_none()
@@ -177,6 +199,13 @@ impl Aggregator {
             canvas: i64,
             gap: bool,
             file_day: String,
+            client_ip: Option<std::net::IpAddr>,
+            ip_received_ms: i64,
+            user_name: Option<String>,
+            timezone: Option<String>,
+            local_time: Option<String>,
+            custom_fields: serde_json::Value,
+            fields_seq: i64,
         }
         let ts = |ms: i64| UNIX_EPOCH + Duration::from_millis(ms.max(0) as u64);
         let mut rows = Vec::with_capacity(dirty.len());
@@ -184,7 +213,11 @@ impl Aggregator {
             let a = self.map.get(sid).expect("dirty key");
             let init = a.init.clone().unwrap_or_default();
             let ua = replayd_pipeline::event::parse_ua(init.ua.as_deref());
-            let user = init.user.clone().unwrap_or_default();
+            let user = a
+                .fields
+                .as_ref()
+                .and_then(|(_, f)| f.user.clone())
+                .unwrap_or_default();
             rows.push(Row {
                 id: *sid,
                 project_id: a.project_id,
@@ -202,7 +235,11 @@ impl Aggregator {
                     Some("capacitor-android") => "capacitor-android".into(),
                     _ => "web".into(),
                 },
-                app_version: init.app_ver,
+                app_version: a
+                    .fields
+                    .as_ref()
+                    .and_then(|(_, f)| f.app_ver.clone())
+                    .or(init.app_ver),
                 device_model: init.device,
                 os_version: init.os_ver,
                 webview_version: init.wv_ver,
@@ -222,6 +259,17 @@ impl Aggregator {
                 canvas: a.d_canvas,
                 gap: a.gap,
                 file_day: a.file_day.clone(),
+                client_ip: a.client_ip,
+                ip_received_ms: a.ip_received_ms,
+                user_name: user.name,
+                timezone: init.timezone,
+                local_time: init.local_time,
+                custom_fields: a
+                    .fields
+                    .as_ref()
+                    .map(|(_, f)| f.custom_fields.clone())
+                    .unwrap_or_else(|| serde_json::json!({})),
+                fields_seq: a.fields.as_ref().map_or(-1, |(seq, _)| i64::from(*seq)),
             });
         }
         let c = self.pool.get().await?;
@@ -268,6 +316,13 @@ impl Aggregator {
                     &r.canvas,
                     &r.gap,
                     day,
+                    &r.client_ip,
+                    &r.ip_received_ms,
+                    &r.user_name,
+                    &r.timezone,
+                    &r.local_time,
+                    &r.custom_fields,
+                    &r.fields_seq,
                 ];
                 v
             })
@@ -337,6 +392,13 @@ const SESSION_COLUMNS: &[&str] = &[
     "canvas_bytes",
     "has_gap",
     "file_day",
+    "client_ip",
+    "ip_received_ms",
+    "user_name",
+    "timezone",
+    "local_time",
+    "custom_fields",
+    "fields_seq",
 ];
 const SESSION_TYPES: &[Type] = &[
     Type::UUID,
@@ -372,20 +434,34 @@ const SESSION_TYPES: &[Type] = &[
     Type::INT8,
     Type::BOOL,
     Type::DATE,
+    Type::INET,
+    Type::INT8,
+    Type::TEXT,
+    Type::TEXT,
+    Type::TEXT,
+    Type::JSONB,
+    Type::INT8,
 ];
 
 const UPSERT: &str = "INSERT INTO sessions SELECT * FROM sessions_stage ON CONFLICT (id, started_at) DO UPDATE SET \
+    client_ip = CASE WHEN EXCLUDED.ip_received_ms >= sessions.ip_received_ms THEN COALESCE(EXCLUDED.client_ip,sessions.client_ip) ELSE sessions.client_ip END, \
+    ip_received_ms = GREATEST(sessions.ip_received_ms,EXCLUDED.ip_received_ms), \
     last_at = GREATEST(sessions.last_at, EXCLUDED.last_at), \
     ended = EXCLUDED.ended, \
     duration_ms = GREATEST(sessions.duration_ms, EXCLUDED.duration_ms), \
     entry_url = COALESCE(sessions.entry_url, EXCLUDED.entry_url), \
     urls = left(CASE WHEN EXCLUDED.urls = '' THEN sessions.urls WHEN sessions.urls = '' THEN EXCLUDED.urls \
            ELSE sessions.urls || E'\\n' || EXCLUDED.urls END, 16000), \
-    user_id = COALESCE(EXCLUDED.user_id, sessions.user_id), \
-    user_email = COALESCE(EXCLUDED.user_email, sessions.user_email), \
+    user_id = CASE WHEN EXCLUDED.fields_seq > sessions.fields_seq THEN EXCLUDED.user_id ELSE sessions.user_id END, \
+    user_email = CASE WHEN EXCLUDED.fields_seq > sessions.fields_seq THEN EXCLUDED.user_email ELSE sessions.user_email END, \
+    user_name = CASE WHEN EXCLUDED.fields_seq > sessions.fields_seq THEN EXCLUDED.user_name ELSE sessions.user_name END, \
+    custom_fields = CASE WHEN EXCLUDED.fields_seq > sessions.fields_seq THEN EXCLUDED.custom_fields ELSE sessions.custom_fields END, \
+    fields_seq = GREATEST(sessions.fields_seq, EXCLUDED.fields_seq), \
+    timezone = COALESCE(sessions.timezone, EXCLUDED.timezone), \
+    local_time = COALESCE(sessions.local_time, EXCLUDED.local_time), \
     release = COALESCE(sessions.release, EXCLUDED.release), \
     environment = COALESCE(sessions.environment, EXCLUDED.environment), \
-    app_version = COALESCE(sessions.app_version, EXCLUDED.app_version), \
+    app_version = CASE WHEN EXCLUDED.fields_seq > sessions.fields_seq THEN COALESCE(EXCLUDED.app_version,sessions.app_version) ELSE COALESCE(sessions.app_version,EXCLUDED.app_version) END, \
     device_model = COALESCE(sessions.device_model, EXCLUDED.device_model), \
     os_version = COALESCE(sessions.os_version, EXCLUDED.os_version), \
     webview_version = COALESCE(sessions.webview_version, EXCLUDED.webview_version), \

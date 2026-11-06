@@ -35,6 +35,19 @@ Add each site's nginx IP (the address replayd's nginx sees the tunnel request fr
 (comma-separated) in replayd's compose environment, so per-IP rate limits see the real client IP. replayd's own nginx is
 trusted already (fixed address `REPLAYD_NGINX_IP`, default 172.30.53.10).
 
+T-63 changes real-client-IP handling from rate-limit-only use to storage on sessions and
+events. Only configured trusted proxies may supply `X-Forwarded-For`; configure the actual
+tunnel/proxy addresses. No GeoIP lookup is added. Deploy the server migration and 32 KB
+metadata support before updating the SDK; compressed replay limits are unchanged.
+
+For identity, replace the application's existing login/logout hooks with
+`setUser({ id, email, name })` and `setUser()` from `@replayd/core`. Use
+`setCustomFields({ ... })` for JSON context separate from tags; updates merge top-level keys,
+null removes keys, and the whole update is dropped when it exceeds the 16 KB/eight-level
+limit. Existing recursive denylist redaction applies. Pass `appVersion` through the existing
+SDK/Nuxt options when it should override the detected native app version. Timezone and
+local date/time with UTC offset are automatic; do not supply IP from application JavaScript.
+
 ## 3. Terminals (Nuxt 4)
 ```diff
 - // plugins/sentry.client.ts (whole file)

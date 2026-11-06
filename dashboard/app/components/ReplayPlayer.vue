@@ -100,6 +100,11 @@ const endTs = ref(0);
 const cur = ref(0); // absolute ms of the playhead
 const panels = shallowRef<Panels>(emptyPanels());
 const panelsVersion = ref(0);
+const fieldChanges = computed(() => {
+  void panelsVersion.value;
+  const q = panelSearch.value.toLowerCase();
+  return panels.value.fields.filter(f => `${f.field} ${f.text}`.toLowerCase().includes(q));
+});
 const tab = ref<"console" | "network" | "ws" | "errors" | "crumbs" | "device">(
   "console",
 );
@@ -912,7 +917,8 @@ onBeforeUnmount(() => {
               </div>
             </template>
           </VirtualList>
-          <dl v-else-if="session" class="divide-y divide-gray-100">
+          <div v-else-if="session">
+          <dl class="divide-y divide-gray-100">
             <div
               v-for="[k, v] in (
                 [
@@ -933,7 +939,12 @@ onBeforeUnmount(() => {
                   ['language', session.lang],
                   ['release', session.release],
                   ['environment', session.environment],
-                  ['user', session.user_id ?? session.user_email],
+                  ['user ID', session.user_id],
+                  ['email', session.user_email],
+                  ['name', session.user_name],
+                  ['IP', session.client_ip],
+                  ['timezone', session.timezone],
+                  ['client date/time', session.local_time],
                   ['entry', session.entry_url],
                   ['segments', session.segments],
                   ['size', `${Math.round(session.bytes / 1024)} KB`],
@@ -959,6 +970,25 @@ onBeforeUnmount(() => {
               </dd>
             </div>
           </dl>
+          <section v-if="session.custom_fields && Object.keys(session.custom_fields).length" class="p-3">
+            <h3 class="font-semibold mb-2">Custom fields</h3>
+            <pre class="code-block overflow-auto">{{ JSON.stringify(session.custom_fields, null, 2) }}</pre>
+          </section>
+          <section class="p-3" aria-label="Field changes">
+            <h3 class="font-semibold mb-2">Field changes</h3>
+            <p v-if="!fieldChanges.length" class="muted">No field changes{{ panelSearch ? ' match.' : '.' }}</p>
+            <div v-else class="h-48">
+              <VirtualList :items="fieldChanges" :row-height="48" :follow="false">
+                <template #default="{ item }">
+                  <button class="block w-full h-12 text-left border-b border-gray-100 px-2" :title="`${dateTime(item.ts)} · ${item.text}`" @click="seekTo(item.ts)">
+                    <span class="block">{{ clock(item.ts - startTs) }} · {{ item.field === 'user' ? 'User' : 'Custom fields' }}</span>
+                    <code class="block truncate muted">{{ item.text }}</code>
+                  </button>
+                </template>
+              </VirtualList>
+            </div>
+          </section>
+          </div>
         </div>
       </aside>
     </div>

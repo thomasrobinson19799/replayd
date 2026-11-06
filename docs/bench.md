@@ -438,12 +438,42 @@ Escape/button exits restored the original geometry. Before/after values are in
 live recording follow remains **5 seconds**. Six dark/light width checks cover both the header
 and network filters; actual clipboard, pointer, keyboard and dropdown behavior passed.
 
-T-63 is not complete: prepared SDK/API field code passes its current unit checks, but the
-metadata-limit decision, later-segment persistence and identity-list budget measurements
-remain pending. Do not infer completed T-63 acceptance from the existing replay benchmark.
+At this earlier checkpoint T-63 still awaited the metadata decision. The completed
+implementation and final measurements below supersede that pending status.
 
 Prepared T-63 SDK cold initialization, 15 fresh-page samples per rate: **0.770 ms median /
 0.865 ms p90 at 1×**, below the unchanged 1 ms desktop gate. At 4×: **4.455 ms median /
 5.065 ms p90**, reported separately. Current sizes including T-66: core **7.48 KB**, IIFE
 **7.54 KB**, replay **25.57 KB**, worker **2.78 KB**, adapters **302/436/416 B**.
 Core/IIFE use the owner-approved 9 KB limits; all other limits remain unchanged.
+
+## T-63 final fields/search verification — 2026-11-06
+
+Owner approved only the replay metadata envelope increase to 32 KiB; custom fields stay
+at 16 KiB. Compressed payload, queue and other performance limits remain unchanged.
+Final SDK sizes: core **7.48 KB**, IIFE **7.54 KB**, lazy replay **25.68 KB**, worker
+**2.82 KB**, framework adapters **302/436/416 B**. All limits pass, including approved
+9 KB core/IIFE. No new core runtime dependency.
+
+Cold initialization, 15 fresh pages each: **0.740 ms median / 1.325 ms p90 at 1×**,
+below the unchanged 1 ms median desktop gate; **5.410 / 6.285 ms at 4×** reported
+separately. These local VM measurements are not physical-device acceptance.
+
+Identity search uses 140,000 sessions, 140,000 retained events and 10,000 issues over
+14 days in a temporary local project. Each of 16 first-page API variants receives
+five warmups and 40 timed requests, including response parsing. Worst p95:
+**56.69 ms sessions**, **65.33 ms issues**, both below **100 ms**. Broad name search
+is **17.44 ms p95** on issues. Exact identities, IP, version, no-match and unfiltered
+cases are included. Independent full SQL verifies the first two issue-result pages.
+The temporary project's generated records are removed after the run.
+
+The initial broad issue query failed at 406.14 ms p95. Deduplicating issue IDs alone
+reduced it to 109.49 ms but still failed. The final bounded ordered-prefix lookup
+(128 candidates, at most 2048 for dense matches) returns only a complete page;
+otherwise the full indexed search runs. No result is truncated and no budget relaxed.
+Reproduce with `node --import ./e2e/chrome-preload.mjs e2e/fields-bench.mjs` against
+the local stack; per-query results are in `docs/fields-search-benchmark.json`.
+
+Final rebuilt-stack 60-minute replay at 20 Mbps: **626 / 689 / 731 ms** first frame,
+median **689 ms**, maximum **731 ms**, all below **1000 ms**. The 697-frame,
+25,902-event, 4,860,614-byte recording plays during download and seeks to 75%.

@@ -35,6 +35,7 @@ impl T {
             received_ms: now_ms(),
             body: Bytes::from(ev.to_string()),
             user_agent: None,
+            client_ip: Some("192.0.2.10".parse().unwrap()),
         };
         let mut b = worker::process_job(&self.sh, &job);
         worker::flush(&self.sh, &mut b).await.unwrap();

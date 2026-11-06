@@ -16,6 +16,7 @@ metrics = "0.24.6"
 parking_lot = "0.12"
 regex = "1.11"
 replayd-db.workspace = true
+replayd-common.workspace = true
 replayd-ingest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

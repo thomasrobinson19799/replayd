@@ -83,6 +83,7 @@ async fn events_happy_path_enqueues_and_sets_cors() {
     );
     let job = s.rx.try_recv().unwrap();
     assert_eq!(job.project_id, 1);
+    assert_eq!(job.client_ip, Some("203.0.113.7".parse().unwrap()));
     assert_eq!(&job.body[..], GZ);
     // numeric id works too, plain JSON accepted
     let r = s
@@ -95,6 +96,44 @@ async fn events_happy_path_enqueues_and_sets_cors() {
         .await
         .unwrap();
     assert_eq!(r.status(), StatusCode::ACCEPTED);
+}
+
+#[tokio::test]
+async fn client_ip_reaches_both_queues_only_from_trusted_peers() {
+    struct Sink(mpsc::Sender<IpAddr>);
+    impl ReplaySink for Sink {
+        fn submit(&self, _: &Project, _: Bytes, _: u64, ip: IpAddr) -> Result<(), ReplayReject> {
+            self.0.try_send(ip).map_err(|_| ReplayReject::Busy)
+        }
+    }
+    for (peer, expected) in [("203.0.113.7", "203.0.113.7"), ("10.0.0.1", "198.51.100.8")] {
+        let cache = Arc::new(ProjectCache::default());
+        cache.replace(vec![row(1, "fx", &[], json!({}))]);
+        let (tx, mut rx) = mpsc::channel(2);
+        let (rtx, mut rrx) = mpsc::channel(2);
+        let state = Arc::new(IngestState::new(
+            cache,
+            IngestConfig::default(),
+            vec!["10.0.0.1".parse().unwrap()],
+            tx,
+            Some(Arc::new(Sink(rtx))),
+        ));
+        let app = router(state, std::env::temp_dir())
+            .layer(MockConnectInfo(SocketAddr::new(peer.parse().unwrap(), 1234)));
+        for kind in ["events", "replay"] {
+            let request = HttpRequest::post(format!("/ingest/fx/{kind}?key=pk_fx"))
+                .header("content-type", "text/plain")
+                .header("x-forwarded-for", "198.51.100.8")
+                .body(Body::from(GZ))
+                .unwrap();
+            assert_eq!(
+                app.clone().oneshot(request).await.unwrap().status(),
+                StatusCode::ACCEPTED
+            );
+        }
+        assert_eq!(rx.try_recv().unwrap().client_ip, Some(expected.parse().unwrap()));
+        assert_eq!(rrx.try_recv().unwrap(), expected.parse::<IpAddr>().unwrap());
+    }
 }
 
 #[tokio::test]

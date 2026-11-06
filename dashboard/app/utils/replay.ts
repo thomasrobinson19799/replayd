@@ -18,6 +18,7 @@ export interface NetworkItem {
 }
 export interface ErrorItem { ts: number, level: string, title: string, issueId?: number }
 export interface CrumbItem { ts: number, cat: string, msg: string }
+export interface FieldChange { ts: number, field: 'user' | 'custom_fields', text: string }
 export interface WsItem { ts: number, k: string, id: number, url?: string, dir?: string, raw?: string, binary?: boolean, size?: number, code?: number, ch: string[], data: Record<string, unknown> }
 export type MarkerKind = 'error' | 'warning' | 'ws' | 'nav' | 'app' | 'gap'
 export interface Marker { ts: number, kind: MarkerKind, label: string }
@@ -29,9 +30,10 @@ export interface Panels {
   crumbs: CrumbItem[]
   ws: WsItem[]
   markers: Marker[]
+  fields: FieldChange[]
 }
 
-export const emptyPanels = (): Panels => ({ console: [], network: [], errors: [], crumbs: [], ws: [], markers: [] })
+export const emptyPanels = (): Panels => ({ console: [], network: [], errors: [], crumbs: [], ws: [], markers: [], fields: [] })
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : v === undefined ? '' : JSON.stringify(v))
 
@@ -47,6 +49,9 @@ export function collect(events: RrEvent[], p: Panels): void {
     const d = (e.data.payload ?? {}) as Record<string, unknown>
     const ts = e.timestamp
     switch (tag) {
+      case 'fields':
+        if (d.field === 'user' || d.field === 'custom_fields') p.fields.push({ ts, field: d.field, text: str(d.value) })
+        break
       case 'console': {
         const args = Array.isArray(d.args) ? d.args.map(str).join(' ') : str(d.args)
         p.console.push({ ts, level: str(d.level) || 'log', text: args })
@@ -103,7 +108,7 @@ export function collect(events: RrEvent[], p: Panels): void {
 
 /** Sort all lists by time (call after each batch; cheap for append-mostly data). */
 export function sortPanels(p: Panels): void {
-  for (const k of ['console', 'network', 'errors', 'crumbs', 'ws', 'markers'] as const) {
+  for (const k of ['console', 'network', 'errors', 'crumbs', 'ws', 'markers', 'fields'] as const) {
     const a = p[k] as { ts: number }[]
     for (let i = 1; i < a.length; i++) {
       if (a[i - 1]!.ts > a[i]!.ts) {

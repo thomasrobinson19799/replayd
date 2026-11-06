@@ -112,6 +112,35 @@ describe('replay worker', () => {
     expect(JSON.parse(events[2].data.payload.raw).push.pub.data.v).toBe(4);
   });
 
+  it('redacts field-history snapshots at their root without losing eight-level JSON', async () => {
+    const { f, send } = await setup();
+    let value: Record<string, unknown> = { password: 'SECRET', keep: 'deep value' };
+    for (let i = 0; i < 7; i++) value = { nested: value };
+    send([1, [
+      { type: 5, timestamp: T, data: { tag: 'fields', payload: { field: 'custom_fields', value } } },
+      { type: 5, timestamp: T + 1, data: { tag: 'fields', payload: { field: 'user', value: null } } },
+    ]]);
+    send([3, meta0(), RED, false]);
+    await settle();
+    const { events } = await decode(f.mock.calls[0]![1]!.body);
+    const json = JSON.stringify(events);
+    expect(json).not.toContain('SECRET');
+    expect(json).toContain('deep value');
+    expect(events[1].data.payload.value).toBe(null);
+  });
+
+  it('transports full 16 KiB custom snapshots inside the 32 KiB metadata envelope', async () => {
+    const { f, send } = await setup();
+    send([1, [{ type: 5, timestamp: T, data: { tag: 'console', payload: { level: 'log', args: ['cut'] } } }]]);
+    const fields = { user: { name: 'Jane', password: 'SECRET' }, custom_fields: { x: 'x'.repeat(16384 - 8) }, app_ver: '2.0' };
+    send([3, { ...meta0(), fields }, RED, false]);
+    await settle();
+    const { meta } = await decode(f.mock.calls[0]![1]!.body);
+    expect(meta.fields.custom_fields).toEqual(fields.custom_fields);
+    expect(meta.fields.user.password).toBe('[Filtered]');
+    expect(meta.fields.app_ver).toBe('2.0');
+  });
+
   it('rebuilds coalesced text mutations from ids + \\0-joined values', async () => {
     const { f, send } = await setup();
     send([2, new Int32Array([7, 9]), '1.0850\u00001.0852', T]);

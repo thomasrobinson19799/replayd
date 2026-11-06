@@ -35,7 +35,7 @@ export const rJson = (x: unknown, d = 0): unknown => {
   if (!x || typeof x != 'object') return x;
   if (d > 7) return '[Depth]';
   if (Array.isArray(x)) return x.map((y) => rJson(y, d + 1));
-  const o: Record<string, unknown> = {};
+  const o: Record<string, unknown> = Object.create(null);
   for (const k in x) o[k] = O.redact.bodyKeys.includes(k.toLowerCase()) ? FILTERED : rJson((x as Record<string, unknown>)[k], d + 1);
   return o;
 };

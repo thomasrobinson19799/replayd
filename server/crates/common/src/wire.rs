@@ -13,8 +13,8 @@
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
-/// Maximum meta JSON size we accept (it is a few hundred bytes in practice).
-pub const MAX_META_LEN: usize = 16 * 1024;
+/// Owner-approved metadata envelope, including up to 16 KiB of custom fields.
+pub const MAX_META_LEN: usize = 32 * 1024;
 /// Maximum number of assets in one segment.
 pub const MAX_ASSETS: usize = 256;
 /// gzip magic bytes.
@@ -74,6 +74,10 @@ pub struct SegmentInit {
     pub user: Option<SegmentUser>,
     #[serde(default)]
     pub tags: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(default)]
+    pub timezone: Option<String>,
+    #[serde(default)]
+    pub local_time: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -82,6 +86,18 @@ pub struct SegmentUser {
     pub id: Option<String>,
     #[serde(default)]
     pub email: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+/// Complete snapshot. A null user and empty custom object explicitly clear previous values.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct SegmentFields {
+    #[serde(default)]
+    pub user: Option<SegmentUser>,
+    pub custom_fields: serde_json::Value,
+    #[serde(default)]
+    pub app_ver: Option<String>,
 }
 
 /// Segment meta JSON (PRD §4.10).
@@ -116,6 +132,8 @@ pub struct SegmentMeta {
     pub ie: u32,
     #[serde(default)]
     pub init: Option<SegmentInit>,
+    #[serde(default)]
+    pub fields: Option<SegmentFields>,
 }
 
 fn default_enc() -> String {
@@ -276,6 +294,20 @@ mod tests {
         let (ev, a2) = parse_stored_body(&seg.body).unwrap();
         assert_eq!(&ev[..], &gz);
         assert_eq!(a2, assets);
+    }
+
+    #[test]
+    fn metadata_envelope_fits_full_custom_fields_and_rejects_over_32k() {
+        let mut m: serde_json::Value = serde_json::from_slice(&meta()).unwrap();
+        m["fields"] = serde_json::json!({"user":null,"custom_fields":{"x":"x".repeat(16384-8)}});
+        let b = encode_replay_body(&serde_json::to_vec(&m).unwrap(), &[0x1f, 0x8b, 8], &[]);
+        assert!(parse_replay_body(&Bytes::from(b)).is_ok());
+        m["padding"] = serde_json::json!("x".repeat(32768));
+        let b = encode_replay_body(&serde_json::to_vec(&m).unwrap(), &[0x1f, 0x8b, 8], &[]);
+        assert_eq!(
+            parse_replay_body(&Bytes::from(b)).unwrap_err(),
+            WireError::MetaTooLarge
+        );
     }
 
     #[test]

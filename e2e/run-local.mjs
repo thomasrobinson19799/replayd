@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { writeFileSync } from 'node:fs';
 const preload = new URL('./chrome-preload.mjs',import.meta.url).href;
-const suites = process.argv.slice(2).length ? process.argv.slice(2) : ['issues','sdk-replay','issue-status','issue-header','capacitor','sourcemaps','remote-config','adapters','player','network-filters','fullscreen','sharing','video','ignore-rules','alerts','observability','wordpress','dashboard','object-storage'];
+const suites = process.argv.slice(2).length ? process.argv.slice(2) : ['issues','sdk-replay','issue-status','issue-header','capacitor','sourcemaps','remote-config','adapters','player','network-filters','fullscreen','sharing','video','ignore-rules','fields','alerts','observability','wordpress','dashboard','object-storage'];
 const results=[];
 for(const suite of suites) {
   console.log(`Running ${suite}…`);

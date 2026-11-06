@@ -23,7 +23,13 @@ pub struct StorageSink {
 }
 
 impl ReplaySink for StorageSink {
-    fn submit(&self, project: &Project, body: Bytes, received_ms: u64) -> Result<(), ReplayReject> {
+    fn submit(
+        &self,
+        project: &Project,
+        body: Bytes,
+        received_ms: u64,
+        client_ip: std::net::IpAddr,
+    ) -> Result<(), ReplayReject> {
         let seg = wire::parse_replay_body(&body).map_err(|_| ReplayReject::Invalid("bad segment"))?;
         let sid = ids::parse_sid(&seg.meta.sid).ok_or(ReplayReject::Invalid("bad sid"))?;
         let rcv = received_ms as i64;
@@ -67,6 +73,8 @@ impl ReplaySink for StorageSink {
             file_day: day,
             meta: seg.meta,
             bytes,
+            client_ip: Some(client_ip),
+            received_ms: received_ms as i64,
         };
         if self.sessions.try_send(info).is_err() {
             metrics::counter!("replayd_queue_rejected_total", "queue" => "sessions").increment(1);

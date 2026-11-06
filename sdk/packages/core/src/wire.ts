@@ -27,7 +27,7 @@ const te = /* @__PURE__ */ new TextEncoder();
 /** Encodes a replay segment body. `metaJson` must be a JSON object string; `eventsGz` gzip bytes. */
 export function encodeSegment(metaJson: string, eventsGz: Uint8Array, assets: WireAsset[] = []): Uint8Array {
   const meta = te.encode(metaJson);
-  if (meta.length > 0xffff) throw new RangeError('meta too large');
+  if (meta.length > 32 * 1024) throw new RangeError('meta too large');
   let size = 2 + meta.length + 4 + eventsGz.length + 2;
   for (const a of assets) size += 9 + a.data.length;
   const out = new Uint8Array(size);

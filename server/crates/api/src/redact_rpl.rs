@@ -164,7 +164,8 @@ mod tests {
                 "reqHeaders": {"content-type": "application/json"}, "reqBody": "{\"pin\":\"[Filtered]\",\"amount\":5}",
                 "resHeaders": {"x": "y"}, "resBody": "{\"balance\":12345.67}"}}},
             {"type": 5, "timestamp": 3, "data": {"tag": "ws", "payload": {"k": "frame", "id": 1, "dir": "in", "raw": "{\"push\":{\"channel\":\"orders:10023451\"}}"}}},
-            {"type": 5, "timestamp": 4, "data": {"tag": "console", "payload": {"level": "log", "args": ["hi"]}}}
+            {"type": 5, "timestamp": 4, "data": {"tag": "console", "payload": {"level": "log", "args": ["hi"]}}},
+            {"type": 5, "timestamp": 4, "data": {"tag": "fields", "payload": {"field": "user", "value": {"name": "Jane"}}}}
         ]);
         let mut f = rpl::encode_header(&[7u8; 16]).to_vec();
         for seq in [1u32, 0, 1] {
@@ -227,6 +228,7 @@ mod tests {
                 assert_eq!(v[1]["data"]["payload"]["type"], "xhr");
                 assert_eq!(v[2]["data"]["payload"]["len"], 38); // length of the raw frame
                 assert_eq!(v[3]["data"]["payload"]["args"][0], "hi");
+                assert_eq!(v[4]["data"]["payload"]["value"]["name"], "Jane");
             }
         }
     }

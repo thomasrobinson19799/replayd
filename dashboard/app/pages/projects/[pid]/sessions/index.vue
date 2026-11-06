@@ -122,9 +122,9 @@ watch(
       </select>
       <input
         v-model="f.user"
-        aria-label="User id / email"
+        aria-label="Search identity or app version"
         type="search"
-        placeholder="User id / email"
+        placeholder="Email, name, IP, user ID or app version"
         class="w-36 rounded border border-gray-300 px-2 py-1.5"
       >
       <input

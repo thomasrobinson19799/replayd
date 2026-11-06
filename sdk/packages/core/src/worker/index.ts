@@ -10,7 +10,7 @@
  */
 import type { RedactOptions } from '../types';
 import { encodeSegment } from '../wire';
-import { rText, rUrl } from '../redact';
+import { rJson, rText, rUrl } from '../redact';
 import { setRedact } from './cfg';
 import { del, load, put } from '../idb';
 
@@ -67,6 +67,7 @@ const add = (e: A) => {
       if (p.level == 'warning') warns++;
       else errs++;
     }
+    else if (d.tag == 'fields') p.value = rJson(p.value);
     else if (d.tag == 'nav') url1(p.to);
     else if (d.tag == 'ws' && typeof p.raw == 'string') {
       if (co && p.dir == 'in' && !(p.raw = sample(p.raw, ts))) return;
@@ -177,6 +178,12 @@ const cut = async (m: A, r: Required<RedactOptions>, hide: boolean) => {
   if (m.init) {
     m.init.url = rUrl(m.init.url);
     m.init.ref = rUrl(m.init.ref);
+    m.init.user = rJson(m.init.user);
+    m.init.tags = rJson(m.init.tags);
+  }
+  if (m.fields) {
+    m.fields.user = rJson(m.fields.user);
+    m.fields.custom_fields = rJson(m.fields.custom_fields);
   }
   if (gap) P.unshift(JSON.stringify({ type: 5, timestamp: t0, data: { tag: 'gap', payload: { reason: 'dropped', segments: gap } } }));
   const meta = JSON.stringify({ ...m, t0, t1, enc: 'gzip', n, urls, clicks, errs, warns, has_error: errs > 0, canvas_bytes: 0, gap: gap > 0 });

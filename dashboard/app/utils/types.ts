@@ -106,7 +106,11 @@ export interface EventPayload {
   tags: Record<string, unknown>;
   ctx?: Record<string, Record<string, unknown>>;
   breadcrumbs: Breadcrumb[];
-  user?: { id?: string; email?: string };
+  user?: { id?: string; email?: string; name?: string };
+  timezone?: string;
+  local_time?: string;
+  received_at?: number;
+  custom_fields?: Record<string, unknown>;
   browser_ver?: string;
 }
 
@@ -120,6 +124,9 @@ export interface IssueEvent {
   platform: string | null;
   url: string | null;
   user_id: string | null;
+  user_email?: string | null;
+  user_name?: string | null;
+  client_ip?: string | null;
   browser: string | null;
   os: string | null;
   app_version: string | null;
@@ -143,6 +150,10 @@ export interface SessionRow {
   entry_url: string | null;
   user_id: string | null;
   user_email: string | null;
+  user_name?: string | null;
+  client_ip?: string | null;
+  timezone?: string | null;
+  local_time?: string | null;
   release: string | null;
   environment: string | null;
   platform: string;
@@ -167,6 +178,7 @@ export interface SessionRow {
 }
 
 export interface SessionDetail extends SessionRow {
+  custom_fields?: Record<string, unknown>;
   can_delete: boolean;
   errors: {
     id: string;

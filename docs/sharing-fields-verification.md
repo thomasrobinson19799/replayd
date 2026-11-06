@@ -1,36 +1,60 @@
-# Sharing and fields plan — verification status
+# Sharing and fields plan — final verification
 
-Local branch: `codex/t-60-sharing-rules-fields`. No push or production deployment.
-Baseline UI-06: `c8a4e7a`, screenshot follow-up `e17ec9f` (already committed before this work).
+All eight tasks are implemented locally on `codex/t-60-sharing-rules-fields`.
+Nothing was pushed or deployed to production. UI-06 baseline: `c8a4e7a`, with
+screenshot follow-up `e17ec9f`.
 
-| Task | Local commit | Status |
+| Task | Local commit / evidence | Result |
 |---|---|---|
-| T-60 public sharing | `584db23` | Complete |
-| T-61 MP4 exports/live follow | `90b2c47` | Complete; live append first landed with T-60 |
-| T-62 ignore rules | `b8fef72` | Complete |
-| T-63 fields | — | Prepared code remains uncommitted; metadata-limit decision and final implementation/acceptance remain |
-| T-64 Copy stack | `ae580a9` | Complete |
-| T-65 issue header | `169c455` | Complete |
-| T-66 network filters | `b644baa` | Complete |
-| T-67 fullscreen | `19c16f3` | Complete |
-
-The independent dashboard tasks were committed while T-63 awaited an owner decision. Details and remaining work: [T-63 continuation](t-63-continuation.md). The plan's 16 KB custom-field allowance cannot fit inside the existing 16 KB *total* metadata cap. The unanswered choice is a metadata-only increase to 32 KB or split updates under the existing cap. No cap has been changed.
+| T-60 public sharing | `584db23`, [acceptance](t-60-sharing.md) | Complete |
+| T-61 MP4/live follow | `90b2c47`, [acceptance](mp4-exports.md) | Complete |
+| T-62 ignore rules | `b8fef72`, [acceptance](t-62-ignore-rules.md) | Complete |
+| T-63 fields/history/search | This task commit, [acceptance](t-63-fields.md) | Complete |
+| T-64 Copy stack | `ae580a9`, [acceptance](t-64-copy-stack.md) | Complete |
+| T-65 issue header | `169c455`, [acceptance](t-65-issue-header.md) | Complete |
+| T-66 network filters | `b644baa`, [acceptance](t-66-network-filters.md) | Complete |
+| T-67 fullscreen | `19c16f3`, [acceptance](t-67-fullscreen.md) | Complete |
 
 ## Actual checks
 
-- Rust formatting, Clippy with warnings denied and all workspace tests passed, including local PostgreSQL integration tests, role checks, share/render limits, ignore suppression and trusted-proxy IP flow. The optional 15-day retention benchmark remains ignored; an external S3 live test is not claimed as run. The local MinIO integration below did run.
-- SDK lint, **147 unit tests + four benchmark-gate tests**, and size checks pass. Current prepared fields code: core 7.48 KB, IIFE 7.54 KB, replay 25.57 KB, worker 2.78 KB; all within their approved limits. Cold-init median 0.770 ms at 1×, below 1 ms. T-63 transport and list budgets remain unverified.
-- Dashboard lint/typecheck, **32 tests** and production build pass. Header/menu/network screenshots were visually inspected at 1440, 1024 and 525 px in both themes. Native pointer and keyboard actions exercised clipboard, dropdowns, custom ignore, filters, request inspection, fullscreen controls and Escape.
-- The rebuilt local dashboard/committed server stack ran all **19 integration suites**. Eighteen passed initially. Monitoring exposed an obsolete six-rule expectation after the earlier bucket alert made seven; its test now checks all seven rule names and the rerun passes. `e2e-results.json` preserves both monitoring attempts. These suites do not establish completion of the unfinished T-63 transport.
-- The 60-minute replay first-frame samples were 660/749/752 ms; progressive playback and seeking passed. MP4 was H.264, 412×916, exactly 6 seconds including idle. Chrome and Edge passed fullscreen in public/authenticated views, preserving aspect ratio and restoring normal geometry after both exit paths.
+- Rust formatting, Clippy with warnings denied and full workspace tests pass,
+  including PostgreSQL integration, all-role access, IP trust boundaries, metadata
+  limits and latest-value persistence across out-of-order delivery and restarts.
+  Native Windows checks used one build job after parallel linking hit a PDB limit.
+- SDK lint, **149 unit tests + four benchmark-gate tests** and size checks pass.
+  Core **7.48 KB**, IIFE **7.54 KB**, replay **25.68 KB**, worker **2.82 KB**;
+  every bundle is within its approved limit. Cold-init median **0.740 ms** at 1×.
+- Dashboard lint/typecheck, **32 tests** and production build pass. Dark/light
+  desktop, intermediate and mobile views were checked at 1440/1024/525 px.
+  Native pointer/keyboard tests cover clipboard, menus, custom ignore, filters,
+  inspection, field-history seeking, fullscreen controls and Escape.
+- All **20 integration suites** pass on rebuilt local images, including real SDK
+  identity changes, all-role display, exact 16 KiB fields, atomic oversize rejection,
+  logout clearing, public sharing/live append, H.264 export, WordPress with actual
+  WP Rocket and local MinIO outage/recovery. [Results](e2e-results.json).
+- Identity lists on 140k sessions/events: worst p95 **56.69 ms sessions / 65.33 ms
+  issues**, under the unchanged 100 ms gate. Ordered pagination matches full SQL.
+  [Measurements and method](bench.md), [per-query data](fields-search-benchmark.json).
+- Chrome and Edge pass authenticated/public fullscreen, aspect ratio, working
+  playback/timeline and restoration through both Escape and the exit button.
+  MP4 acceptance produces H.264, 412×916, exactly six seconds including idle.
+- Final 60-minute replay at 20 Mbps: first-frame **626 / 689 / 731 ms**, median
+  **689 ms**, below **1000 ms**; progressive playback and 75% seeking pass.
 
-## Confirmed operational choices
+## Confirmed choices and remaining owner checks
 
-Live follow polls every **5 seconds**. Copy stack includes at most **30 recent breadcrumbs**.
-Odd MP4 dimensions get at most **one pixel of padding per dimension**. The renderer is offline;
-external images or other uncaptured assets can be missing. The selected FFmpeg build enables
-GPL/libx264; distributing that image entails the corresponding GPL source/license obligations,
-and codec patent questions are separate. See [encoder build/license evidence](mp4-exports.md).
+Live follow polls every **5 seconds**. Copy stack includes at most **30 recent
+breadcrumbs**, excludes identity/custom fields/tags and follows the in-app toggle.
 
-No production rollout, physical-device or owner live-site acceptance is asserted. Existing
-owner-validation gates remain in `PROGRESS.md`.
+Replay metadata now allows **32 KiB**, as explicitly approved, to carry the full
+**16 KiB** custom-field snapshot. Deploy the server/migration before the updated SDK.
+Compressed replay limits and all other performance gates remain unchanged.
+
+Odd MP4 dimensions get at most **one pixel of padding per dimension**. The renderer
+is offline, so uncaptured external images/assets may be missing. The FFmpeg build
+enables GPL/libx264; distribution carries corresponding source/license obligations,
+with codec patents a separate consideration. [Build and license evidence](mp4-exports.md).
+
+The optional 15-day retention benchmark was not rerun, and no real external bucket,
+physical-device, live-site rollout or remote CI execution is claimed. Existing
+owner-validation gates remain in `PROGRESS.md` under D-34.

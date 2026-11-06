@@ -103,6 +103,12 @@ const tags = computed(() => {
       e.browser ? `${e.browser} ${e.payload.browser_ver ?? ""}`.trim() : null,
     ],
     ["user", e.user_id],
+    ["email", e.user_email ?? e.payload.user?.email],
+    ["name", e.user_name ?? e.payload.user?.name],
+    ["IP", e.client_ip],
+    ["timezone", e.payload.timezone],
+    ["client date/time", e.payload.local_time],
+    ["received at", e.payload.received_at ? dateTime(e.payload.received_at) : null],
     ["url", e.url],
     ...Object.entries(e.payload.tags ?? {}).map(
       ([k, v]) => [k, String(v)] as [string, string],
@@ -216,6 +222,7 @@ watch(id, load);
           </dl></section>
           <section><h2>Platforms</h2><dl class="platform-breakdown"><div v-for="(n,p) in issue.platform_split" :key="p"><dt>{{ platformLabel(String(p)) }}</dt><dd>{{ compact(n) }}</dd></div></dl></section>
           <section><h2>Tags &amp; context</h2><dl class="issue-tags"><div v-for="[k,v] in tags" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></div></dl></section>
+          <section v-if="event?.payload.custom_fields && Object.keys(event.payload.custom_fields).length"><h2>Custom fields</h2><pre class="code-block text-xs overflow-auto">{{ JSON.stringify(event.payload.custom_fields, null, 2) }}</pre></section>
         </aside>
       </div>
     </template>

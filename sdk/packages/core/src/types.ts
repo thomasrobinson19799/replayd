@@ -56,6 +56,7 @@ export interface ReplaydOptions {
   /** Same-origin tunnel path, e.g. `/_rp`. Ignored under Capacitor. */
   tunnel?: string;
   release?: string;
+  appVersion?: string;
   environment?: string;
   replay?: ReplayOptions;
   websocket?: WebSocketOptions;
@@ -76,6 +77,7 @@ export interface Breadcrumb {
 export interface User {
   id?: string;
   email?: string;
+  name?: string;
   [k: string]: unknown;
 }
 
@@ -94,6 +96,10 @@ export interface ReplaydEvent {
   env?: string;
   platform: 'web' | 'capacitor-android';
   user?: User;
+  app_version?: string;
+  timezone?: string;
+  local_time?: string;
+  custom_fields?: Record<string, unknown>;
   tags?: Record<string, string>;
   ctx?: Record<string, unknown>;
   breadcrumbs: Breadcrumb[];
@@ -102,7 +108,7 @@ export interface ReplaydEvent {
 
 /** Ring-buffer / replay custom event (rrweb custom event tag + payload + original timestamp). */
 export interface RingEvent {
-  type: 'console' | 'network' | 'ws' | 'nav' | 'breadcrumb' | 'error' | 'app' | 'gap';
+  type: 'console' | 'network' | 'ws' | 'nav' | 'breadcrumb' | 'error' | 'app' | 'gap' | 'fields';
   ts: number;
   data: Record<string, unknown>;
 }
@@ -147,7 +153,8 @@ export interface Internal {
   /** session counters for segment meta */
   c: { ws_disc: number };
   /** user, tags and the shared error context (mutable: the Capacitor chunk adds `ctx.app` + tags) */
-  m: () => { user?: User; tags: Record<string, string>; ctx: Record<string, unknown> };
+  m: () => { user?: User; tags: Record<string, string>; ctx: Record<string, unknown>; custom_fields?: Record<string, unknown>; fields_version?: number };
+  clock?: (ts: number) => { timezone?: string; local_time: string };
   /** records a custom event (replay sink or ring) */
   r: (type: RingEvent['type'], data: RingEvent['data'], ts?: number) => void;
   /** adds a breadcrumb */
