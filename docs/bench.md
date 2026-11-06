@@ -422,3 +422,28 @@ This is a local debug-build observation, not a production throughput assertion
 or a new budget. Matching does not query Postgres; cache refresh indexes existing
 rules by ID and only writes counters that changed. SDK and replay-ingest paths
 are unchanged.
+
+## T-64–T-67 dashboard verification — 2026-11-06
+
+The completed header/copy, network-filter and fullscreen changes retain the replay budget.
+On the rebuilt local dashboard, the existing 20 Mbps / 60-minute fixture produced first-frame
+samples **660 / 749 / 752 ms** (median **749 ms**, max **752 ms**, limit **1000 ms**).
+The 696-frame, 25,428-event, 4,764,596-byte recording began playback before download completion
+and passed the 75% seek check. These are local measurements, not a production throughput claim.
+
+Chrome and Edge at 1920×1080, public/authenticated players: fullscreen grew a 412×915 recording
+from about **291×646** to **430×954** while retaining its aspect ratio. Controls ended at y=1068;
+Escape/button exits restored the original geometry. Before/after values are in
+`docs/fullscreen-{before,after}.json`. Copy stack includes at most **30 breadcrumbs**;
+live recording follow remains **5 seconds**. Six dark/light width checks cover both the header
+and network filters; actual clipboard, pointer, keyboard and dropdown behavior passed.
+
+T-63 is not complete: prepared SDK/API field code passes its current unit checks, but the
+metadata-limit decision, later-segment persistence and identity-list budget measurements
+remain pending. Do not infer completed T-63 acceptance from the existing replay benchmark.
+
+Prepared T-63 SDK cold initialization, 15 fresh-page samples per rate: **0.770 ms median /
+0.865 ms p90 at 1×**, below the unchanged 1 ms desktop gate. At 4×: **4.455 ms median /
+5.065 ms p90**, reported separately. Current sizes including T-66: core **7.48 KB**, IIFE
+**7.54 KB**, replay **25.57 KB**, worker **2.78 KB**, adapters **302/436/416 B**.
+Core/IIFE use the owner-approved 9 KB limits; all other limits remain unchanged.

@@ -18,12 +18,13 @@ const wait = async (url, ok = (r) => r.ok, ms = 60000) => {
   throw new Error(`timeout: ${url}`);
 };
 const checks = {};
+const expectedRules = ['ReplaydDiskAlmostFull','ReplaydQueueRejections','ReplaydIngestSlow','ReplaydProjectSilent','ReplaydPostgresBatchErrors','ReplaydBucketUploadsFailing','ReplaydDown'].sort();
 const names = ['rp-obs-prom', 'rp-obs-grafana'];
 for (const n of names) try { sh('rm', '-f', n); } catch { /* none */ }
 try {
   // 1. rules
   const out = execFileSync('docker', ['run', '--rm', '--entrypoint', 'promtool', '-v', `${obs}:/o:ro`, 'prom/prometheus:v3.5.0', 'check', 'rules', '/o/alerts.yml'], { encoding: 'utf8' });
-  checks.promtool = /SUCCESS: 6 rules found/.test(out);
+  checks.promtool = out.includes(`SUCCESS: ${expectedRules.length} rules found`);
   // some traffic so the metrics exist
   const { api } = await login();
   await api('GET', '/me');
@@ -42,7 +43,8 @@ try {
   }
   checks.scraped = want.every((m) => have.includes(m));
   const rules = await (await fetch('http://127.0.0.1:19090/api/v1/rules')).json();
-  checks.rules_loaded = rules.data.groups[0]?.rules.length === 6 && rules.data.groups[0].rules.every((r) => r.health !== 'err');
+  const loadedRules = rules.data.groups.flatMap(g => g.rules);
+  checks.rules_loaded = JSON.stringify(loadedRules.map(r => r.name).sort()) === JSON.stringify(expectedRules) && loadedRules.every(r => r.health !== 'err');
   // 3. every dashboard expression is valid PromQL
   const dash = JSON.parse(readFileSync(`${obs}/grafana-dashboard.json`, 'utf8'));
   const bad = [];
