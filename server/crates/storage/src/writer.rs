@@ -71,6 +71,24 @@ enum Msg {
     Write(Segment),
     /// Flush + fsync everything, then ack (tests, shutdown).
     Sync(SyncSender<()>),
+    Seal {
+        project_id: i32,
+        day: String,
+        sid: Uuid,
+        expected_len: u64,
+        ack: SyncSender<SealOutcome>,
+    },
+}
+
+/// Result of [`Writers::seal`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SealOutcome {
+    /// The file had the expected length and is gone.
+    Removed,
+    /// Frames arrived since the upload (or the check failed): the file stays.
+    Changed,
+    /// The file no longer exists: deleted by a user or by retention.
+    Gone,
 }
 
 pub struct Writers {
@@ -148,6 +166,23 @@ impl Writers {
         }
     }
 
+    /// Removes an uploaded recording if it still has `expected_len` bytes. The shard is the file's only writer and
+    /// handles this in queue order, so a frame cannot land between the length check and the removal.
+    /// Blocking; `None` if the shard has stopped.
+    pub fn seal(&self, project_id: i32, day: &str, sid: Uuid, expected_len: u64) -> Option<SealOutcome> {
+        let (ack, rx) = sync_channel(1);
+        self.shards[self.shard_of(&sid)]
+            .send(Msg::Seal {
+                project_id,
+                day: day.to_string(),
+                sid,
+                expected_len,
+                ack,
+            })
+            .ok()?;
+        rx.recv().ok()
+    }
+
     /// Total queued messages (gauge `replayd_queue_depth{queue="replay"}` is approximate).
     pub fn shard_count(&self) -> usize {
         self.shards.len()
@@ -167,10 +202,7 @@ impl Writers {
 }
 
 pub fn session_path(data_dir: &Path, project_id: i32, day: &str, sid: &Uuid) -> PathBuf {
-    data_dir
-        .join(project_id.to_string())
-        .join(day)
-        .join(format!("{}.rpl", sid.as_hyphenated()))
+    rpl::recording_path(data_dir, project_id, day, &sid.as_hyphenated().to_string())
 }
 
 struct OpenFile {
@@ -235,6 +267,16 @@ impl Shard {
                     self.sync();
                     let _ = ack.send(());
                 }
+                Ok(Msg::Seal {
+                    project_id,
+                    day,
+                    sid,
+                    expected_len,
+                    ack,
+                }) => {
+                    let outcome = self.seal(project_id, &day, sid, expected_len);
+                    let _ = ack.send(outcome);
+                }
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => {
                     self.sync();
@@ -264,6 +306,28 @@ impl Shard {
             metrics::histogram!("replayd_writer_fsync_seconds").record(started.elapsed().as_secs_f64());
         }
         self.last_sync = Instant::now();
+    }
+
+    fn seal(&mut self, project_id: i32, day: &str, sid: Uuid, expected_len: u64) -> SealOutcome {
+        if let Some(f) = self.files.remove(&sid) {
+            if f.dirty
+                && let Err(e) = f.file.sync_data()
+            {
+                tracing::error!(error = %e, "fdatasync failed");
+            }
+            metrics::gauge!("replayd_open_files").decrement(1.0);
+        }
+        let path = session_path(&self.cfg.data_dir, project_id, day, &sid);
+        match std::fs::metadata(&path) {
+            Ok(m) if m.len() == expected_len => match std::fs::remove_file(&path) {
+                Ok(()) => SealOutcome::Removed,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => SealOutcome::Gone,
+                Err(_) => SealOutcome::Changed,
+            },
+            Ok(_) => SealOutcome::Changed,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => SealOutcome::Gone,
+            Err(_) => SealOutcome::Changed,
+        }
     }
 
     fn sweep(&mut self) {
@@ -422,6 +486,36 @@ mod tests {
             dups += x.duplicate as u32;
         }
         assert_eq!(dups, 1);
+    }
+
+    #[test]
+    fn seal_removes_only_an_unchanged_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = WriterConfig::new(dir.path().to_path_buf());
+        cfg.shards = 2;
+        let w = Writers::start(cfg, None).unwrap();
+        let sid = Uuid::now_v7();
+        let day = "2026-11-03";
+        let path = session_path(dir.path(), 7, day, &sid);
+        w.submit(seg(sid, 0, b"zero")).unwrap();
+        w.sync_all();
+        let len = std::fs::metadata(&path).unwrap().len();
+
+        w.submit(seg(sid, 1, b"late")).unwrap();
+        w.sync_all();
+        assert_eq!(w.seal(7, day, sid, len), Some(SealOutcome::Changed));
+        assert!(path.exists(), "a frame written since the upload is not lost");
+
+        let len = std::fs::metadata(&path).unwrap().len();
+        assert_eq!(w.seal(7, day, sid, len), Some(SealOutcome::Removed));
+        assert!(!path.exists());
+        assert_eq!(w.seal(7, day, sid, len), Some(SealOutcome::Gone));
+
+        // queue order: a frame submitted before the seal is on disk before the length check
+        w.submit(seg(sid, 2, b"two")).unwrap();
+        assert_eq!(w.seal(7, day, sid, 0), Some(SealOutcome::Changed));
+        let buf = std::fs::read(&path).unwrap();
+        assert_eq!(rpl::index(&buf).unwrap().frames[0].header.seq, 2);
     }
 
     #[test]

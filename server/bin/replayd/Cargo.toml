@@ -17,6 +17,7 @@ replayd-alerts.workspace = true
 replayd-common.workspace = true
 replayd-db.workspace = true
 replayd-ingest.workspace = true
+replayd-objstore.workspace = true
 replayd-pipeline.workspace = true
 replayd-storage.workspace = true
 axum.workspace = true

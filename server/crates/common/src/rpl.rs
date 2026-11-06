@@ -35,6 +35,19 @@ pub enum RplError {
     Short,
 }
 
+/// Local path of a recording: `data/<project_id>/<YYYY-MM-DD of session start>/<sid>.rpl`.
+pub fn recording_path(
+    data_dir: &std::path::Path,
+    project_id: i32,
+    day: &str,
+    sid: &str,
+) -> std::path::PathBuf {
+    data_dir
+        .join(project_id.to_string())
+        .join(day)
+        .join(format!("{sid}.rpl"))
+}
+
 pub fn encode_header(sid: &[u8; 16]) -> [u8; HEADER_LEN] {
     let mut h = [0u8; HEADER_LEN];
     h[..4].copy_from_slice(MAGIC);

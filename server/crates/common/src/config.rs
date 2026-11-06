@@ -25,6 +25,46 @@ pub struct Config {
     pub secure_cookies: bool,
     /// Telegram Bot API base (tests point it at a mock).
     pub telegram_api: String,
+    /// Bucket for finished recordings (D-37); without it recordings stay on local disk.
+    pub object_storage: Option<ObjectStorageConfig>,
+}
+
+/// S3-compatible bucket for finished recordings.
+#[derive(Clone, Deserialize)]
+pub struct ObjectStorageConfig {
+    pub endpoint: String,
+    pub bucket: String,
+    pub region: String,
+    pub access_key: String,
+    pub secret_key: String,
+    /// A recording untouched for this long is uploaded. Must outlast the 15 min session end, otherwise live
+    /// sessions are uploaded and merged repeatedly.
+    #[serde(default = "default_upload_idle_secs")]
+    pub upload_idle_secs: u64,
+    /// Local read-through cache cap.
+    #[serde(default = "default_cache_max_mb")]
+    pub cache_max_mb: u64,
+}
+
+fn default_upload_idle_secs() -> u64 {
+    20 * 60
+}
+
+fn default_cache_max_mb() -> u64 {
+    2048
+}
+
+// Hand-written so the credentials can never reach a log through `{:?}`.
+impl std::fmt::Debug for ObjectStorageConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ObjectStorageConfig")
+            .field("endpoint", &self.endpoint)
+            .field("bucket", &self.bucket)
+            .field("region", &self.region)
+            .field("upload_idle_secs", &self.upload_idle_secs)
+            .field("cache_max_mb", &self.cache_max_mb)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -61,6 +101,7 @@ impl Default for Config {
             bootstrap_admin_password: None,
             secure_cookies: true,
             telegram_api: "https://api.telegram.org".into(),
+            object_storage: None,
         }
     }
 }
@@ -156,6 +197,40 @@ impl Config {
         if let Some(v) = get("REPLAYD_PROJECT_BURST") {
             self.ingest.project_burst = parse(v, "REPLAYD_PROJECT_BURST")?;
         }
+        // Compose passes unset variables as empty strings, so empty means unset.
+        let s3 = |k: &str| get(k).filter(|v| !v.is_empty());
+        let required = [
+            ("REPLAYD_S3_ENDPOINT", s3("REPLAYD_S3_ENDPOINT")),
+            ("REPLAYD_S3_BUCKET", s3("REPLAYD_S3_BUCKET")),
+            ("REPLAYD_S3_REGION", s3("REPLAYD_S3_REGION")),
+            ("REPLAYD_S3_ACCESS_KEY", s3("REPLAYD_S3_ACCESS_KEY")),
+            ("REPLAYD_S3_SECRET_KEY", s3("REPLAYD_S3_SECRET_KEY")),
+        ];
+        if required.iter().any(|(_, v)| v.is_some()) {
+            // half a configuration would silently keep every recording on local disk
+            if let Some((k, _)) = required.iter().find(|(_, v)| v.is_none()) {
+                return Err(ConfigError::Env(k));
+            }
+            let [endpoint, bucket, region, access_key, secret_key] =
+                required.map(|(_, v)| v.unwrap_or_default());
+            self.object_storage = Some(ObjectStorageConfig {
+                endpoint,
+                bucket,
+                region,
+                access_key,
+                secret_key,
+                upload_idle_secs: default_upload_idle_secs(),
+                cache_max_mb: default_cache_max_mb(),
+            });
+        }
+        if let Some(o) = &mut self.object_storage {
+            if let Some(v) = s3("REPLAYD_S3_UPLOAD_IDLE_SECS") {
+                o.upload_idle_secs = parse(v, "REPLAYD_S3_UPLOAD_IDLE_SECS")?;
+            }
+            if let Some(v) = s3("REPLAYD_S3_CACHE_MB") {
+                o.cache_max_mb = parse(v, "REPLAYD_S3_CACHE_MB")?;
+            }
+        }
         Ok(())
     }
 }
@@ -183,5 +258,50 @@ mod tests {
             c.apply_env(|k| (k == "REPLAYD_LISTEN").then(|| "nope".into()))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn object_storage_is_all_or_nothing_and_never_prints_credentials() {
+        let full: HashMap<&str, &str> = [
+            ("REPLAYD_S3_ENDPOINT", "https://fsn1.your-objectstorage.com"),
+            ("REPLAYD_S3_BUCKET", "replayd"),
+            ("REPLAYD_S3_REGION", "fsn1"),
+            ("REPLAYD_S3_ACCESS_KEY", "AKIDVALUE"),
+            ("REPLAYD_S3_SECRET_KEY", "SECRETVALUE"),
+        ]
+        .into();
+        let mut c = Config::default();
+        c.apply_env(|k| full.get(k).map(|s| s.to_string())).unwrap();
+        let o = c.object_storage.clone().unwrap();
+        assert_eq!((o.upload_idle_secs, o.cache_max_mb), (1200, 2048));
+        let printed = format!("{c:?}");
+        assert!(printed.contains("replayd"));
+        assert!(!printed.contains("AKIDVALUE") && !printed.contains("SECRETVALUE"));
+
+        // compose passes every unset variable as empty: that is "off", not an error
+        let mut off = Config::default();
+        off.apply_env(|k| k.starts_with("REPLAYD_S3_").then(String::new))
+            .unwrap();
+        assert!(off.object_storage.is_none());
+
+        let mut partial = Config::default();
+        let err = partial
+            .apply_env(|k| {
+                (k != "REPLAYD_S3_SECRET_KEY")
+                    .then(|| full.get(k).map(|s| s.to_string()))
+                    .flatten()
+            })
+            .unwrap_err();
+        assert!(err.to_string().contains("REPLAYD_S3_SECRET_KEY"));
+
+        let mut tuned = Config::default();
+        let with_tuning = |k: &str| match k {
+            "REPLAYD_S3_UPLOAD_IDLE_SECS" => Some("60".to_string()),
+            "REPLAYD_S3_CACHE_MB" => Some("100".to_string()),
+            _ => full.get(k).map(|s| s.to_string()),
+        };
+        tuned.apply_env(with_tuning).unwrap();
+        let o = tuned.object_storage.unwrap();
+        assert_eq!((o.upload_idle_secs, o.cache_max_mb), (60, 100));
     }
 }

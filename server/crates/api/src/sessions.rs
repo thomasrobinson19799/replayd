@@ -278,6 +278,14 @@ pub async fn delete(
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => return Err(ApiError::Internal(e.to_string())),
     }
+    // Local file first: an upload running right now sees it gone and removes the object it just wrote.
+    // On failure the row stays, so the delete can be retried.
+    if let Some(store) = &st.replay_store {
+        store
+            .delete_session(pid, &day, &id.to_string())
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+    }
     let c = st.pool.get().await?;
     c.execute(
         "DELETE FROM sessions WHERE id = $1 AND project_id = $2",
@@ -290,10 +298,32 @@ pub async fn delete(
 }
 
 pub fn recording_path(data_dir: &std::path::Path, project_id: i32, day: &str, sid: &str) -> PathBuf {
-    data_dir
-        .join(project_id.to_string())
-        .join(day)
-        .join(format!("{sid}.rpl"))
+    replayd_common::rpl::recording_path(data_dir, project_id, day, sid)
+}
+
+/// Plain file with the complete recording, wherever it currently lives.
+async fn locate_recording(st: &ApiState, pid: i32, day: &str, sid: &str) -> ApiResult<PathBuf> {
+    let Some(store) = &st.replay_store else {
+        return Ok(recording_path(&st.data_dir, pid, day, sid));
+    };
+    store.materialize(pid, day, sid).await.map_err(|e| match e {
+        replayd_objstore::Error::NotFound => ApiError::NotFound,
+        e => ApiError::Internal(e.to_string()),
+    })
+}
+
+/// The viewer's copy (T-35) or the file itself.
+async fn prepare_recording(src: PathBuf, sensitive: bool) -> ApiResult<PathBuf> {
+    if sensitive {
+        return Ok(src);
+    }
+    tokio::task::spawn_blocking(move || crate::redact_rpl::ensure(&src))
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => ApiError::NotFound,
+            _ => ApiError::Internal(e.to_string()),
+        })
 }
 
 /// Parses `bytes=a-b` / `bytes=a-` / `bytes=-n` (single range only).
@@ -325,21 +355,27 @@ pub async fn recording(
     let ended: bool = r.get(4);
     let day: String = r.get(29);
     let sid_norm: String = r.get(0);
-    let mut path = recording_path(&st.data_dir, pid, &day, &sid_norm);
     // viewers get a copy without network headers/bodies and WS frame contents (T-35)
-    if !user.can(&st, pid, Perm::ViewSensitive) {
-        let src = path.clone();
-        path = tokio::task::spawn_blocking(move || crate::redact_rpl::ensure(&src))
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?
-            .map_err(|e| match e.kind() {
-                std::io::ErrorKind::NotFound => ApiError::NotFound,
-                _ => ApiError::Internal(e.to_string()),
-            })?;
-    }
-    let mut f = tokio::fs::File::open(&path)
-        .await
-        .map_err(|_| ApiError::NotFound)?;
+    let sensitive = user.can(&st, pid, Perm::ViewSensitive);
+    let src = locate_recording(&st, pid, &day, &sid_norm).await?;
+    let path = prepare_recording(src, sensitive).await;
+    // An upload or cache sweep can remove the file right after it was located: look once more.
+    let opened = match &path {
+        Ok(p) => tokio::fs::File::open(p).await.ok(),
+        Err(_) => None,
+    };
+    let mut f = match (opened, st.replay_store.is_some()) {
+        (Some(f), _) => f,
+        (None, false) => {
+            path?;
+            return Err(ApiError::NotFound);
+        }
+        (None, true) => {
+            let src = locate_recording(&st, pid, &day, &sid_norm).await?;
+            let p = prepare_recording(src, sensitive).await?;
+            tokio::fs::File::open(&p).await.map_err(|_| ApiError::NotFound)?
+        }
+    };
     let meta = f
         .metadata()
         .await

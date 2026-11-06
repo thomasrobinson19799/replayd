@@ -8,13 +8,18 @@
 //!   directories, never single files), plus directories of deleted projects.
 //! * Source maps: `data/_sourcemaps/<pid>/<release>/` 30 days after the release's last event (or its upload,
 //!   if it never had events).
+//! * Bucket (D-37): the same day and deleted-project rules under the store's `replays/` prefix. A failure is
+//!   logged and the next run retries, because it works from a listing.
 //!
 //! Retention N days keeps today (UTC) and the N − 1 previous days.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use replayd_db::Pool;
+use replayd_objstore::ReplayStore;
 
 pub const MAX_DAYS: i32 = 14;
 const MAPS_DAYS: i64 = 30;
@@ -85,11 +90,41 @@ pub struct Report {
     pub issues_deleted: u64,
     pub day_dirs_removed: usize,
     pub map_releases_removed: usize,
+    pub objects_removed: u64,
     pub ms: u64,
 }
 
+/// Removes expired days and deleted projects from the bucket. `keep` maps project id → first day kept.
+pub async fn purge_bucket(
+    store: &ReplayStore,
+    keep: &HashMap<i32, i64>,
+) -> Result<u64, replayd_objstore::Error> {
+    // No projects means a wrong or freshly restored database, not "delete every recording".
+    if keep.is_empty() {
+        return Ok(0);
+    }
+    let mut removed = 0;
+    for pid in store.list_projects().await? {
+        let Some(&first_kept) = keep.get(&pid) else {
+            removed += store.delete_prefix(pid, None).await?;
+            continue;
+        };
+        for day in store.list_days(pid).await? {
+            if parse_day(&day).is_some_and(|d| d < first_kept) {
+                removed += store.delete_prefix(pid, Some(&day)).await?;
+            }
+        }
+    }
+    Ok(removed)
+}
+
 /// One retention pass for "today" = `today` (days since epoch, UTC).
-pub async fn run_once(pool: &Pool, data_dir: &Path, today: i64) -> Result<Report, replayd_db::DbError> {
+pub async fn run_once(
+    pool: &Pool,
+    data_dir: &Path,
+    today: i64,
+    store: Option<&ReplayStore>,
+) -> Result<Report, replayd_db::DbError> {
     let started = Instant::now();
     let mut rep = Report::default();
     let c = pool.get().await?;
@@ -167,10 +202,11 @@ pub async fn run_once(pool: &Pool, data_dir: &Path, today: i64) -> Result<Report
 
     // 4. disk (blocking fs work off the async threads)
     let dir = data_dir.to_path_buf();
+    let known: HashMap<i32, i64> = projects.iter().map(|(p, d)| (*p, keep(*d))).collect();
+    let local_known = known.clone();
     let (dirs, rels) = tokio::task::spawn_blocking(move || {
         let mut n = 0;
-        let known: std::collections::HashMap<i32, i64> =
-            projects.iter().map(|(p, d)| (*p, keep(*d))).collect();
+        let known = local_known;
         if let Ok(rd) = std::fs::read_dir(&dir) {
             for e in rd.flatten() {
                 let name = e.file_name().to_string_lossy().to_string();
@@ -207,12 +243,18 @@ pub async fn run_once(pool: &Pool, data_dir: &Path, today: i64) -> Result<Report
     .unwrap_or((0, 0));
     rep.day_dirs_removed = dirs;
     rep.map_releases_removed = rels;
+    if let Some(s) = store {
+        match purge_bucket(s, &known).await {
+            Ok(n) => rep.objects_removed = n,
+            Err(e) => tracing::error!(error = %e, "bucket retention failed"),
+        }
+    }
     rep.ms = started.elapsed().as_millis() as u64;
     Ok(rep)
 }
 
 /// Daily at 03:00 Asia/Tehran.
-pub fn spawn(pool: Pool, data_dir: PathBuf) -> tokio::task::JoinHandle<()> {
+pub fn spawn(pool: Pool, data_dir: PathBuf, store: Option<Arc<ReplayStore>>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
             let now = SystemTime::now()
@@ -220,7 +262,7 @@ pub fn spawn(pool: Pool, data_dir: PathBuf) -> tokio::task::JoinHandle<()> {
                 .unwrap_or_default()
                 .as_secs();
             tokio::time::sleep(Duration::from_secs(secs_until_next(now))).await;
-            match run_once(&pool, &data_dir, today_utc()).await {
+            match run_once(&pool, &data_dir, today_utc(), store.as_deref()).await {
                 Ok(r) => {
                     metrics::counter!("replayd_retention_runs_total").increment(1);
                     metrics::histogram!("replayd_retention_seconds").record(r.ms as f64 / 1000.0);
@@ -230,6 +272,7 @@ pub fn spawn(pool: Pool, data_dir: PathBuf) -> tokio::task::JoinHandle<()> {
                         issues = r.issues_deleted,
                         dirs = r.day_dirs_removed,
                         map_releases = r.map_releases_removed,
+                        objects = r.objects_removed,
                         ms = r.ms,
                         "retention done"
                     );
@@ -257,6 +300,57 @@ mod tests {
         assert_eq!(parse_day("2026-13-03"), None);
         assert_eq!(parse_day("stage"), None);
         assert_eq!(day_str(20_760), "2026-11-03");
+    }
+
+    #[tokio::test]
+    async fn bucket_purge_follows_project_retention_and_spares_other_keys() {
+        use object_store::memory::InMemory;
+        use object_store::path::Path as ObjPath;
+        use object_store::{ObjectStore, PutPayload};
+
+        let mem = Arc::new(InMemory::new());
+        let dir = tempfile::tempdir().unwrap();
+        let store = ReplayStore::new(mem.clone(), dir.path(), 1, Duration::from_secs(1));
+        for k in [
+            "replays/1/2026-11-01/old.rpl",
+            "replays/1/2026-11-02/kept.rpl",
+            "replays/1/stage/odd-folder.rpl",
+            "replays/9/2026-11-02/deleted-project.rpl",
+            "20/9/0123/0", // same shape as Sentry's replay keys: a shared bucket must not lose them
+        ] {
+            mem.put(&ObjPath::from(k), PutPayload::from_static(b"x"))
+                .await
+                .unwrap();
+        }
+        let keep = HashMap::from([(1, parse_day("2026-11-02").unwrap())]);
+
+        assert_eq!(
+            purge_bucket(&store, &HashMap::new()).await.unwrap(),
+            0,
+            "no projects: touch nothing"
+        );
+        assert_eq!(purge_bucket(&store, &keep).await.unwrap(), 2);
+
+        let mut left = Vec::new();
+        for k in [
+            "replays/1/2026-11-01/old.rpl",
+            "replays/1/2026-11-02/kept.rpl",
+            "replays/1/stage/odd-folder.rpl",
+            "replays/9/2026-11-02/deleted-project.rpl",
+            "20/9/0123/0",
+        ] {
+            if mem.head(&ObjPath::from(k)).await.is_ok() {
+                left.push(k);
+            }
+        }
+        assert_eq!(
+            left,
+            [
+                "replays/1/2026-11-02/kept.rpl",
+                "replays/1/stage/odd-folder.rpl",
+                "20/9/0123/0"
+            ]
+        );
     }
 
     #[test]

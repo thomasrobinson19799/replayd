@@ -39,6 +39,13 @@ groups:
         annotations:
           summary: "replayd Postgres batch errors on {{ $labels.table }}"
           description: "Batches were dropped; see JSON logs (level=error) in Loki: {app=\"replayd\"}."
+      - alert: ReplaydBucketUploadsFailing
+        expr: sum(increase(replayd_objstore_uploads_total{result="error"}[30m])) > 0 and sum(increase(replayd_objstore_uploads_total{result="ok"}[30m])) == 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "replayd cannot upload finished recordings to the bucket"
+          description: "Recordings wait on the local volume, so it keeps growing. Check credentials and the bucket; uploads resume on their own (docs/object-storage.md)."
       - alert: ReplaydDown
         expr: up{job="replayd"} == 0
         for: 2m

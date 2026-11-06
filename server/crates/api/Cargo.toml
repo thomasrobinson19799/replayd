@@ -23,6 +23,7 @@ regex = "1.11"
 replayd-common.workspace = true
 replayd-db.workspace = true
 replayd-ingest.workspace = true
+replayd-objstore.workspace = true
 replayd-pipeline.workspace = true
 replayd-alerts.workspace = true
 sourcemap = "9"

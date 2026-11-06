@@ -72,7 +72,7 @@ async fn retention_drops_old_days() {
         std::fs::write(d.join("a.map"), b"{}").unwrap();
     }
 
-    let r = retention::run_once(&pool, tmp.path(), today).await.unwrap();
+    let r = retention::run_once(&pool, tmp.path(), today, None).await.unwrap();
     eprintln!("retention report: {r:?}");
     // global window = 14 days (largest project retention): days 14 and 15 back are dropped as partitions
     assert!(
@@ -127,7 +127,7 @@ async fn retention_drops_old_days() {
             .exists()
     );
     // idempotent
-    let r2 = retention::run_once(&pool, tmp.path(), today).await.unwrap();
+    let r2 = retention::run_once(&pool, tmp.path(), today, None).await.unwrap();
     assert_eq!(
         (r2.partitions_dropped, r2.rows_deleted, r2.day_dirs_removed),
         (0, 0, 0)
@@ -194,7 +194,7 @@ async fn retention_bench_15_days() {
         .unwrap()
         .get(0);
     let tmp = tempfile::tempdir().unwrap();
-    let r = retention::run_once(&pool, tmp.path(), today).await.unwrap();
+    let r = retention::run_once(&pool, tmp.path(), today, None).await.unwrap();
     let after: i64 = c
         .query_one("SELECT count(*) FROM sessions WHERE project_id = $1", &[&pid])
         .await

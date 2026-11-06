@@ -78,6 +78,14 @@ services:
       # Per-IP rate limits key on the real client: trust our nginx (fixed address below) and the sites'
       # /_rp/ tunnel nginx hosts (comma-separated IPs in REPLAYD_SITE_PROXIES).
       REPLAYD_TRUSTED_PROXIES: ${REPLAYD_NGINX_IP:-172.30.53.10},${REPLAYD_SITE_PROXIES:-}
+      # Bucket for finished recordings (docs/object-storage.md); empty keeps everything on this volume.
+      REPLAYD_S3_ENDPOINT: ${REPLAYD_S3_ENDPOINT:-}
+      REPLAYD_S3_BUCKET: ${REPLAYD_S3_BUCKET:-}
+      REPLAYD_S3_REGION: ${REPLAYD_S3_REGION:-}
+      REPLAYD_S3_ACCESS_KEY: ${REPLAYD_S3_ACCESS_KEY:-}
+      REPLAYD_S3_SECRET_KEY: ${REPLAYD_S3_SECRET_KEY:-}
+      REPLAYD_S3_UPLOAD_IDLE_SECS: ${REPLAYD_S3_UPLOAD_IDLE_SECS:-}
+      REPLAYD_S3_CACHE_MB: ${REPLAYD_S3_CACHE_MB:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

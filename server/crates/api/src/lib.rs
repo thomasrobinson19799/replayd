@@ -41,6 +41,8 @@ pub struct ApiState {
     pub maps: Option<Arc<replayd_pipeline::SourceMaps>>,
     /// Telegram sender (test message from the settings tab), T-32.
     pub alerts: Option<Arc<replayd_alerts::Alerts>>,
+    /// Bucket tier for finished recordings, D-37.
+    pub replay_store: Option<Arc<replayd_objstore::ReplayStore>>,
     login_ip: BucketMap<IpAddr>,
     login_email: BucketMap<u64>,
 }
@@ -63,6 +65,7 @@ impl ApiState {
             trusted_proxies,
             maps: None,
             alerts: None,
+            replay_store: None,
             data_dir,
             login_ip: BucketMap::new(50_000),
             login_email: BucketMap::new(50_000),
@@ -100,6 +103,16 @@ impl ApiState {
     pub fn with_alerts(self: Arc<Self>, alerts: Arc<replayd_alerts::Alerts>) -> Arc<Self> {
         let mut st = Arc::try_unwrap(self).unwrap_or_else(|_| unreachable!("not shared yet"));
         st.alerts = Some(alerts);
+        Arc::new(st)
+    }
+
+    /// Serves and deletes recordings through the bucket tier (call before `router`).
+    pub fn with_replay_store(
+        self: Arc<Self>,
+        store: Option<Arc<replayd_objstore::ReplayStore>>,
+    ) -> Arc<Self> {
+        let mut st = Arc::try_unwrap(self).unwrap_or_else(|_| unreachable!("not shared yet"));
+        st.replay_store = store;
         Arc::new(st)
     }
 

@@ -23,12 +23,15 @@ replayd-pipeline = { path = "crates/pipeline" }
 replayd-alerts = { path = "crates/alerts" }
 replayd-api = { path = "crates/api" }
 replayd-db = { path = "crates/db" }
+replayd-objstore = { path = "crates/objstore" }
 
 anyhow = "1.0.104"
 axum = "0.8.9"
 bytes = "1.12.1"
 mimalloc = "0.1.52"
-serde = { version = "1.0.229", features = ["derive"] }
+# 0.12: same reqwest and ring as the rest of the server (0.14 adds aws-lc-rs, which needs cmake on musl)
+object_store = { version = "0.12.5", default-features = false }
+serde ={ version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net", "signal", "time", "sync", "fs", "io-util"] }

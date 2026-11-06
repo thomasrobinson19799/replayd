@@ -159,8 +159,16 @@ async fn main() -> anyhow::Result<()> {
             .context("ensuring partitions")?;
     }
     spawn_partitions(pool.clone());
+    // Bucket tier for finished recordings (D-37); off unless configured.
+    let replay_store = cfg
+        .object_storage
+        .as_ref()
+        .map(|o| replayd_objstore::ReplayStore::from_config(o, &cfg.data_dir).map(Arc::new))
+        .transpose()
+        .context("object storage")?;
     // retention (§5.8): daily 03:00 Asia/Tehran
-    let _retention = replayd_storage::retention::spawn(pool.clone(), cfg.data_dir.clone());
+    let _retention =
+        replayd_storage::retention::spawn(pool.clone(), cfg.data_dir.clone(), replay_store.clone());
 
     let projects = Arc::new(ProjectCache::default());
     let n = projects.reload(&pool).await.context("loading projects")?;
@@ -193,6 +201,9 @@ async fn main() -> anyhow::Result<()> {
     let writers =
         replayd_storage::Writers::start(replayd_storage::WriterConfig::new(cfg.data_dir.clone()), None)
             .context("starting replay writers")?;
+    let _uploader = replay_store
+        .clone()
+        .map(|s| replayd_storage::uploader::spawn(s, writers.clone(), cfg.data_dir.clone()));
     let (sessions_tx, sessions_rx) = mpsc::channel(50_000);
     let sink_sessions_weak = sessions_tx.downgrade();
     workers.push(replayd_storage::aggregator::spawn(
@@ -267,7 +278,8 @@ async fn main() -> anyhow::Result<()> {
         maps,
     )
     .await?
-    .with_alerts(alerts.clone());
+    .with_alerts(alerts.clone())
+    .with_replay_store(replay_store);
     // ends when the pipeline (the only sender) is dropped
     let _alerts_task = replayd_alerts::spawn(alerts, signals_rx);
 

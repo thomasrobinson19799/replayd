@@ -3,7 +3,8 @@
 pub mod aggregator;
 pub mod retention;
 pub mod sink;
+pub mod uploader;
 pub mod writer;
 
 pub use sink::StorageSink;
-pub use writer::{WriterConfig, Writers, session_path};
+pub use writer::{SealOutcome, WriterConfig, Writers, session_path};
