@@ -189,6 +189,14 @@ pub async fn run_once(
             )
             .await?;
     }
+    // Partition drops cannot cascade session FKs. Access checks already fail closed;
+    // remove expired/orphaned capabilities as part of the same daily sweep.
+    c.execute(
+        "DELETE FROM replay_shares l WHERE l.expires_at <= now() OR NOT EXISTS \
+        (SELECT 1 FROM sessions s WHERE s.id = l.session_id AND s.project_id = l.project_id)",
+        &[],
+    )
+    .await?;
     // 3. source-map releases 30 days after their last event (or upload)
     let old = c
         .query(

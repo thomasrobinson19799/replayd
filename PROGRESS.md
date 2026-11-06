@@ -76,6 +76,23 @@ Status values: `todo` · `wip` · `done` · `owner-validation` · `blocked` · `
 
 ## Continue in a new session
 
+## Sharing, video, fields and dashboard improvements (owner request, 2026-11-06)
+
+Accepted specification: `docs/sharing-fields-plan.md`. Baseline UI-06 already committed as `c8a4e7a`; screenshot follow-up `e17ec9f`. Cumulative branch: `codex/t-60-sharing-rules-fields`. No push or deployment.
+
+| ID | Task | Status | Notes |
+|---|---|---|---|
+| T-60 | Public share links | done | docs/t-60-sharing.md; server/SDK/dashboard checks pass, authenticated/public live follow (5s), six theme/width screenshots and sharing browser tests pass. MP4 remains T-61. |
+| T-61 | MP4 rendering and live follow | pending | Depends on sharing |
+| T-62 | Ignore rules | pending | Per accepted plan |
+| T-63 | SDK/server fields | pending | Owner permits core/IIFE 9 KB only |
+| T-64 | Copy stack | pending | Exclude identity/custom fields/tags |
+| T-65 | Issue header | pending | Header/actions only |
+| T-66 | Network filters | pending | Fetch/XHR + combined filters |
+| T-67 | Fullscreen | pending | Reproduce then fix |
+
+### Previous continuation notes (superseded by the task table above)
+
 Read PRD.md (including decisions), AGENTS.md, this tracker and README.md.
 The owner selected Sentry-like dashboard conventions and owns live testing (D-34).
 All in-scope repository implementation is complete. T-41/T-51/T-52 have only owner-run

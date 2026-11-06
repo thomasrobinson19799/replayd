@@ -16,7 +16,7 @@
 | Client SDK | Own lightweight SDK on `@rrweb/record`, **performance is the #1 requirement** |
 | Targets | Vanilla JS (incl. WordPress via script tag), Vue 3 / Nuxt 4, React 18/19, **Capacitor Android (first-class)** |
 | Browsers | **Evergreen only**: last 2 versions of Chrome, Edge, Firefox, Safari; Android System WebView 100+. Build target ES2022, no polyfills |
-| Server | **Rust**, single binary |
+| Server | **Rust**, single binary; separate Chromium/ffmpeg MP4 render service (T-61) |
 | Recording | **Every session recorded and uploaded** (sample rate configurable, default 1.0) |
 | Storage | **Local disk** (replay files) + **dedicated PostgreSQL container** (isolated from trading DBs) |
 | Scale | < 10k sessions/day; architecture must handle 100× unchanged |
@@ -36,7 +36,7 @@
 | Area | Default |
 |---|---|
 | Privacy | Record everything **except** secrets: password inputs always masked; `Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key` stripped; JSON keys `password, token, access_token, refresh_token, secret, otp, pin, cvv, card_number` redacted in HTTP bodies **and WebSocket frames** (Centrifugo connect commands carry a `token`) |
-| User identity | Optional `setUser({ id, email })`, searchable; set it to the MT4/MT5 login or CRM user id |
+| User identity | Optional `setUser({ id, email, name })`, searchable; real client IP stored server-side; separate JSON `setCustomFields` (T-63) |
 | Transport | Web: same-origin tunnel path `/_rp/` via nginx. Capacitor: **direct** to ingest domain (relative paths resolve to `https://localhost` inside the APK) |
 | Migrations | **Atlas** versioned SQL migrations, same as your other services |
 | Remote config | SDK fetches per-project config from the server, so sampling / canvas / WS / kill switch can change **without shipping a new APK** |
@@ -69,7 +69,7 @@ Per-project settings: allowed origins (incl. `https://localhost` for APKs), canv
 ### 2.1 SDK
 | Metric | Budget |
 |---|---|
-| `@replayd/core` (errors, breadcrumbs, console, HTTP, WS, transport, remote config) | **≤ 7 KB** min+gz |
+| `@replayd/core` and IIFE (errors, breadcrumbs, console, HTTP, WS, transport, remote config) | **≤ 9 KB** min+gz (owner-approved T-63; other limits unchanged) |
 | Replay chunk (rrweb record + glue), lazy | **≤ 45 KB** min+gz |
 | Canvas snapshot module, lazy, loaded only if canvas enabled **and** a canvas exists | **≤ 3 KB** min+gz |
 | Worker script | **≤ 4 KB** min+gz |
@@ -122,13 +122,14 @@ Dashboard (Nuxt SPA) ◀──── /api ───────────│ r
                                            └──────────────────────────────────┘
 ```
 
-Single process, bounded in-process channels, no Kafka/Redis/ClickHouse.
+Single Rust process, bounded in-process channels, no Kafka/Redis/ClickHouse. T-61 adds a separate Chromium/ffmpeg service: at most 2 running MP4 renders and 10 waiting, 24-hour file retention, bounded disk usage. Untrusted replay content must not access internal services or secrets.
 
 ---
 
 ## 4. Client SDK
 
 ### 4.1 Packages
+T-63 adds `setUser` name, `init.appVersion`, automatic timezone/local date-time with offset, and `setCustomFields`. Custom fields merge keys (null deletes), accept JSON to depth 8 and 16 KB, use existing recursive key redaction, and reject an oversized update atomically. Explicit appVersion overrides Capacitor detection. No new core runtime dependency.
 | Package | Contents |
 |---|---|
 | `@replayd/core` | `init`, `captureException`, `captureMessage`, `setUser`, `setTag(s)`, `setContext`, `addBreadcrumb`, `flush`, `close`; global handlers; console, fetch/XHR, **WebSocket** and history patching; session manager; transport; remote config; platform detection (web / capacitor-android) |
@@ -200,7 +201,7 @@ init({
 | `replayIntegration({...})` | `replay.{...}` (same option names) |
 | `networkDetailAllowUrls: [origin, apiHost]` | same, or `['self','apiHost']` in Nuxt module |
 | `enableLogs` | dropped; console tab covers it |
-| `sendDefaultPii: false` | IP never stored |
+| `sendDefaultPii: false` | Real connection or trusted-proxy client IP stored on sessions and events (D-38) |
 | `release: useAppConfig().app_version` | automatic in Nuxt module |
 
 ### 4.4 Startup sequence
@@ -292,6 +293,7 @@ u16 asset_count | { u32 asset_id | u8 type (1=webp) | u32 len | bytes } × asset
 ```
 
 ### 4.11 Errors, network, console
+T-63: session starts and errors carry timezone and local date-time with UTC offset, separate from server time. User/custom-field changes carry timestamps in replay events and later segment metadata; session aggregation keeps latest values. T-66 adds fetch/XHR request type; absent type in older recordings means unknown.
 - **Errors:** sources per §0.1. Raw `stack` string sent; **parsing on server**. Client flood control: signature = type + message + first stack line; first sent, then ≤ 1 per 10 s with `count`; caps 100/session, 20/min. Each event carries `sid` + `ts`, is mirrored into the replay as an `error` event and forces a segment flush. Batched every 2 s / 10 events to `POST /ingest/:pid/events` (gzip JSON).
 - **Network:** fetch/XHR patched; method, redacted URL, status, timings, sizes. Headers/bodies only for allowlisted URLs; text types only; caps 10 KB req / 50 KB res; body read async via `clone().text()` after the app gets the response; **skip** `text/event-stream`, octet-stream, unknown-length large bodies. JSON redaction recursive (depth 8). Ingest URL never recorded.
 - **Console:** all levels to replay console tab; safe stringify depth 3, 1 KB/arg, 5 args, circular-safe; originals called first.
@@ -333,6 +335,7 @@ Merged over local config (remote wins for rates/toggles, never for redaction lis
 ## 5. Server (Rust)
 
 ### 5.1 Stack
+MP4 rendering runs outside the binary/image in a separate Chromium + ffmpeg service (D-39).
 | Concern | Choice |
 |---|---|
 | Runtime / HTTP | `tokio`, `axum`, `hyper`, `tower-http` |
@@ -405,6 +408,7 @@ One chat per project (bot token + chat id). Alerts: **new issue**, **regression*
 Daily 03:00 (Asia/Tehran): drop `sessions`/`events` daily partitions older than retention (partitions pre-created 7 days ahead), `rm -r data/<pid>/<day>`, delete issues with `last_seen` beyond retention. Per-project retention ≤ 14 by default.
 
 ### 5.9 PostgreSQL schema (sketch, Atlas migration 0001)
+T-60 adds hashed, revocable, expiring per-session share capabilities. T-62 adds at most 50 ignore rules per project (error/console message or network/WS URL, case-insensitive contains or validated regex), applied before fingerprinting, issue counts and alerts. Rules are cached; bounded periodic counter flushes record dropped count/last match. Replays and session counters are unchanged. T-63 extends session/event fields with name, IP, timezone, local date-time and custom JSON; latest session identity is searchable, custom JSON/history are display-only.
 ```sql
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
@@ -489,12 +493,14 @@ Postgres: dedicated container, `synchronous_commit = off` for app role, autovacu
 | Project settings, keys, Telegram, remote config, members | ✔ | ✔ | | |
 | View issues, sessions, replays | ✔ | ✔ | ✔ | ✔ |
 | View network headers/bodies & WS frame contents | ✔ | ✔ | ✔ | ✖ (redacted in API) |
+| Create/revoke public full-data replay links | ✔ | ✔ | ✔ | ✔ |
 | Change issue status | ✔ | ✔ | ✔ | ✖ |
 | Delete sessions / issues | ✔ | ✔ | | |
 
 Enforced in the API layer per request (`project_members` cached in memory, invalidated on change). All admin actions → `audit_log`.
 
 ### 5.11 Dashboard API (`/api/*`)
+Share management is per session (`/api/sessions/:sid/shares`); `/api/public/shares/:token` and its recording endpoint grant only that session without login. Tokens are shown only on creation, stored hashed, never logged, and expire no later than retention. Public responses are no-store/noindex/no-referrer. Logged-in viewer redaction is unchanged. T-61 adds render status/start/download to authenticated and valid-link access; public new jobs are limited to 10/hour/IP (reuse excluded; visitor IPs not persisted). T-63 adds latest-identity session search and retained-event identity issue search.
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/auth/login`, `/logout`, `GET /api/me` | Auth (login rate-limited, CSRF token) |
@@ -517,9 +523,13 @@ Enforced in the API layer per request (`project_members` cached in memory, inval
 Pages: Login · Projects (+ settings tabs: General, Keys & DSN, Members, Telegram, Remote config, Fingerprint rules) · Issues · Issue detail · Sessions · Replay player · Users (superadmin).
 
 ### 6.1 Issue detail
+T-64 Copy stack follows the in-app toggle and excludes identity, custom fields and tags. T-65 changes only header/status actions: first/last seen and releases, platforms, Play replay, primary Resolve, dropdown next-release/Ignore, Copy stack, and More with copy-link/delete. Existing event-section layout and role restrictions remain.
 Symbolicated stack (in-app toggle, context lines), breadcrumbs, tags (platform, app version, device, browser, release, brand), event navigation, **"Play replay at this moment"**, resolve / resolve in next release / ignore (until date, until N more events, forever), platform split (web vs APK counts).
 
 ### 6.2 Replay player
+- T-60 public share page reuses the player, without shell/project/issue links or Share/Delete. Every tab exposes full captured data, even for viewer-created links. Share dialog creates multiple links (1h/24h/7d/until retention), copies the new URL and lists creator/expiry with revoke.
+- T-61 MP4 Download on both players: H.264, full real-time duration including idle, first recorded viewport, later resizes letterboxed, cursor only/no overlays. Jobs survive navigation, reuse running/finished output; live-session output is a snapshot at render start, with partial note and render-latest when newer data arrives. Both players poll/append only new bytes until session end/unload.
+- T-63 Device shows new fields and clickable timestamped Field changes (no timeline marker). T-66 adds AND-combined Method/Status/Type/Slower-than filters, preserving text/failed filters. T-67 fullscreen contains replay/controls only, scales up with aspect ratio, and restores state on Esc.
 - `rrweb` Replayer, custom controls, skip inactivity, 1×–8×.
 - **Decode worker:** streamed fetch of `.rpl`, sort/dedup seq, `DecompressionStream` per frame, assets → blob URLs, apply asset base URL rewrite, progressive playback from first full snapshot.
 - Canvas: `canvas` events draw the WebP onto the replayed canvas node (rrweb replay plugin), so the TradingView chart updates every few seconds.
@@ -541,11 +551,12 @@ Symbolicated stack (in-app toggle, context lines), breadcrumbs, tags (platform, 
 ---
 
 ## 8. Security & privacy
-Public key + Origin allowlist + rate limits + size caps on ingest; upload tokens and passwords hashed; client IP never stored; all redaction in the SDK before data leaves the device; password inputs always masked; viewer role cannot see bodies/frames; replays play in rrweb's sandboxed iframe; dashboard cookie HttpOnly/Secure/SameSite=Lax + CSRF; audit log; TLS at nginx; dashboard optionally IP-allowlisted in nginx (office/VPN).
+Public key + Origin allowlist + rate limits + size caps on ingest; upload tokens and passwords hashed; real client IP stored on sessions/events (connection or trusted-proxy X-Forwarded-For), no GeoIP; SDK redaction defaults and password masking unchanged. Authenticated viewer recordings hide bodies/frames. Explicit public capabilities expose full captured data regardless of creator role, with expiry/revocation/retention checks and no token logs/referrers/indexing. Only create/revoke are audited, not visits/downloads/renders. Replays use rrweb's sandboxed iframe; isolated render service cannot reach internal services/secrets. Dashboard cookie HttpOnly/Secure/SameSite=Lax + CSRF; TLS at nginx; optional dashboard office/VPN allowlist must exempt share pages, public APIs and their static assets.
 
 ---
 
 ## 9. Deployment
+- T-61 adds a separate bounded MP4 renderer service with Chromium and ffmpeg; neither enters the Rust/distroless image.
 - `deploy/docker-compose.yml`: `replayd`, `postgres:17` (dedicated, own volume), `nginx` (TLS, dashboard static, `/ingest` and `/api` proxy), `atlas` one-shot migrate job.
 - Data volume on local NVMe ≥ 500 GB.
 - Per-site nginx tunnel:
@@ -648,6 +659,19 @@ CI: `sdk:lint-test`, `sdk:size`, `server:clippy-test`, `dashboard:build`, `bench
 | T-54 | Runnable daily database backups and restore verification | T-10 | Opt-in daily dump job, private atomic archives, bounded retention, isolated restore test |
 | T-55 | Bucket storage for finished recordings | T-21, T-33 | Finished `.rpl` files move to an S3-compatible bucket; playback, redaction, delete and retention work unchanged; bucket outage never affects ingest |
 
+Owner-requested cumulative local task series (no push/deployment), full accepted specification: [sharing-fields-plan](docs/sharing-fields-plan.md).
+
+| ID | Task | Depends | Acceptance criteria |
+|---|---|---|---|
+| T-60 | Public share links | UI-06 | Per-session full-data capability, expiry/revoke/audit, shell-free shared player, private logs |
+| T-61 | MP4 rendering and live follow | T-60 | H.264, 2 running/10 waiting, 24h cleanup, 10/hour public limit, progressive live append |
+| T-62 | Ignore rules | T-61 | Admin CRUD, 50 max, cached pre-issue matching, bounded counter flush, audit |
+| T-63 | SDK/server fields | T-62 | Latest identity/history/search, IP/timezone/date-time, redacted 16 KB JSON, core/IIFE ≤9 KB |
+| T-64 | Copy stack | T-63 | Visible frames/context, bounded breadcrumbs, no identity/custom/tags |
+| T-65 | Issue header | T-64 | UI-06 tokens, responsive keyboard/theme checks, existing body layout preserved |
+| T-66 | Network filters | T-65 | AND dropdowns, fetch/XHR metadata, legacy unknown type |
+| T-67 | Fullscreen | T-66 | Replay/controls only, aspect-fit upscaling, Esc/state restored |
+
 ### 12.3 Milestones
 | M | Tasks | Outcome |
 |---|---|---|
@@ -712,3 +736,9 @@ Decisions taken during implementation that refine or deviate from the PRD above.
 
 | D-36 | 2026-11-06 | Owner supplied a precise compact visual system for a styling-only dashboard update (UI-06), superseding D-33 plum colors. Use the supplied dark/light semantic tokens and system typography while preserving the existing theme selection, framework, behavior, copy, API/data handling and tests. No dependencies, fonts or commits. | Explicit owner brief; native select popups and fixed replay virtualization geometry remain unchanged. Verification: docs/ui-06-restyle.md. |
 | D-37 | 2026-11-06 | Owner chose bucket storage for replays (T-55), deviating from "Local disk" in §1: Sentry on the same host already keeps its replays in Hetzner Object Storage and the local disk is 92% full. Optional and off by default. Only **finished** recordings move: appends and the ≤ 1 s crash-loss guarantee still need a real disk, Postgres and source maps stay local. A file untouched for 20 min (longer than the 15 min session end) is uploaded and its size verified; the shard writer, as the file's only writer, then removes it only if its length is unchanged, so a frame cannot be lost to the removal. Late segments start a new local file and are merged into the object by `seq` (first copy wins, a truncated object tail is cut). Reads go through a local cache (`data/_cache/`, 2 GB, 24 h) so `Range`, `ETag` and viewer redaction keep working on plain files; an object is downloaded whole on first play. All keys live under `replays/`: Sentry's replay keys have numeric top-level folders, the same shape as project ids, so retention must never list or delete outside that prefix. Retention skips the bucket when the database has no projects at all. Client: `object_store` 0.12 (same `reqwest`/`ring` as the server; 0.14 adds `aws-lc-rs`, which needs cmake on musl), path-style URLs. Memory stays bounded: 4 uploads × 8 MB part buffer, merges hold one frame. New metrics `replayd_objstore_uploads_total{result}`, `replayd_objstore_upload_bytes_total`, `replayd_objstore_pending_files`. Setup and limits: docs/object-storage.md. |
+
+| D-38 | 2026-11-06 | Owner approves storing real client IP on sessions and events, resolved from connection/trusted-proxy X-Forwarded-For, no GeoIP. New identity fields include name, app version, timezone/local date-time, redacted JSON custom fields and timestamped field history. Latest session values only are searchable; issues match retained events. | Accepted implementation plan §3.4/3.8; SDK/server implementation T-63 pending. |
+| D-39 | 2026-11-06 | Owner approves a separate Chromium/ffmpeg service for H.264 MP4 output, 2 running/10 waiting, 24-hour output retention, 10 new public renders/hour/IP, shared job reuse and live-session snapshots. Live players append new bytes until session end. Owner follow-up permits at most one pixel of padding per odd dimension for compatible H.264 output, without resizing the recorded page. | Accepted plan §3.2/3.8 and explicit compatibility choice; T-61 pending. |
+| D-40 | 2026-11-06 | Public secret per-session links expose full captured data to anyone holding the link, including when created by viewers. Authenticated viewers remain filtered. All roles create/revoke; tokens are SHA-256 hashed and shown once, expiry is capped by retention and checked against current retention/session existence on every read. Create/revoke audit entries contain only link/session IDs. Public routes omit access logs and set no-store/noindex/no-referrer; optional dashboard IP restrictions exempt public routes and static assets. | Explicit owner choice S1–S9; T-60. |
+| D-41 | 2026-11-06 | Owner raises core and IIFE gzip limits from 7 KB to 9 KB; every other size/performance limit remains unchanged. | Accepted plan F15; apply size configuration in T-63. |
+| D-42 | 2026-11-06 | Owner requests T-60…T-67 on one cumulative local branch, one task commit series, following the accepted plan. UI-06 baseline is already committed as c8a4e7a, with screenshot follow-up e17ec9f. Header-only redesign, Copy stack, network filters and fullscreen keep UI-06 tokens. Ignore rules are server-only and leave replay/session counts unchanged. No push/deployment. | Supersedes one-task-per-branch and UI-06 no-commit instruction for this owner-authorized delivery. Full specification: docs/sharing-fields-plan.md. |

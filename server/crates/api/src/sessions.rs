@@ -30,7 +30,7 @@ const COLS: &str = "id::text, project_id, (extract(epoch from started_at) * 1000
     environment, platform, app_version, device_model, os_version, webview_version, browser, browser_ver, os, vw, vh, \
     lang, error_count, warn_count, click_count, ws_disconnects, segments, bytes, has_gap, file_day::text";
 
-fn session_json(r: &Row) -> Value {
+pub(crate) fn session_json(r: &Row) -> Value {
     json!({
         "id": r.get::<_, String>(0),
         "project_id": r.get::<_, i32>(1),
@@ -209,7 +209,13 @@ pub async fn list(
     Ok(Json(json!({ "sessions": sessions, "next_cursor": next })))
 }
 
-async fn load(st: &ApiState, user: &Auth, sid: &str) -> ApiResult<Row> {
+pub(crate) async fn load(st: &ApiState, user: &Auth, sid: &str) -> ApiResult<Row> {
+    let r = load_public(st, sid).await?;
+    user.require(st, r.get(1), Perm::View)?;
+    Ok(r)
+}
+
+pub(crate) async fn load_public(st: &ApiState, sid: &str) -> ApiResult<Row> {
     let id = Uuid::try_parse(sid).map_err(|_| ApiError::NotFound)?;
     let c = st.pool.get().await?;
     let r = c
@@ -219,7 +225,6 @@ async fn load(st: &ApiState, user: &Auth, sid: &str) -> ApiResult<Row> {
         )
         .await?
         .ok_or(ApiError::NotFound)?;
-    user.require(st, r.get(1), Perm::View)?;
     Ok(r)
 }
 
@@ -351,13 +356,22 @@ pub async fn recording(
     headers: HeaderMap,
 ) -> ApiResult<Response> {
     let r = load(&st, &user, &sid).await?;
+    let sensitive = user.can(&st, r.get(1), Perm::ViewSensitive);
+    serve_recording(&st, &r, sensitive, headers).await
+}
+
+pub(crate) async fn serve_recording(
+    st: &ApiState,
+    r: &Row,
+    sensitive: bool,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
     let pid: i32 = r.get(1);
     let ended: bool = r.get(4);
     let day: String = r.get(29);
     let sid_norm: String = r.get(0);
     // viewers get a copy without network headers/bodies and WS frame contents (T-35)
-    let sensitive = user.can(&st, pid, Perm::ViewSensitive);
-    let src = locate_recording(&st, pid, &day, &sid_norm).await?;
+    let src = locate_recording(st, pid, &day, &sid_norm).await?;
     let path = prepare_recording(src, sensitive).await;
     // An upload or cache sweep can remove the file right after it was located: look once more.
     let opened = match &path {
@@ -371,7 +385,7 @@ pub async fn recording(
             return Err(ApiError::NotFound);
         }
         (None, true) => {
-            let src = locate_recording(&st, pid, &day, &sid_norm).await?;
+            let src = locate_recording(st, pid, &day, &sid_norm).await?;
             let p = prepare_recording(src, sensitive).await?;
             tokio::fs::File::open(&p).await.map_err(|_| ApiError::NotFound)?
         }

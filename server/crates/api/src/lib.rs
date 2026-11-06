@@ -7,6 +7,7 @@ pub mod projects;
 pub mod rbac;
 pub mod redact_rpl;
 pub mod sessions;
+pub mod shares;
 pub mod sourcemaps;
 pub mod stats;
 pub mod users;
@@ -180,6 +181,16 @@ pub fn router(st: Arc<ApiState>) -> Router {
             get(sessions::get_one).delete(sessions::delete),
         )
         .route("/api/sessions/{sid}/recording", get(sessions::recording))
+        .route(
+            "/api/sessions/{sid}/shares",
+            get(shares::list).post(shares::create),
+        )
+        .route(
+            "/api/sessions/{sid}/shares/{id}",
+            axum::routing::delete(shares::revoke),
+        )
+        .route("/api/public/shares/{token}", get(shares::detail))
+        .route("/api/public/shares/{token}/recording", get(shares::recording))
         .route("/api/projects/{pid}/releases", post(sourcemaps::create_release))
         .route(
             "/api/projects/{pid}/releases/{release}/sourcemaps",
@@ -190,6 +201,12 @@ pub fn router(st: Arc<ApiState>) -> Router {
 }
 
 async fn no_store(mut r: Response) -> Response {
+    r.headers_mut()
+        .insert("referrer-policy", HeaderValue::from_static("no-referrer"));
+    r.headers_mut().insert(
+        "x-robots-tag",
+        HeaderValue::from_static("noindex, nofollow, noarchive"),
+    );
     r.headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     r

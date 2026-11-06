@@ -73,6 +73,10 @@ fn spawn_gauges(data_dir: std::path::PathBuf, queues: Vec<QueueDepth>) {
 
 /// Dashboard API request log + latency (§7 log fields: req_id, latency_ms; never payloads, keys or tokens).
 async fn api_log(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    // Public capabilities, including malformed tokens, must never enter access logs.
+    if req.uri().path().starts_with("/api/public/") {
+        return next.run(req).await;
+    }
     let started = std::time::Instant::now();
     let method = req.method().clone();
     // path template-ish: ids collapsed so the label/log stays low-cardinality

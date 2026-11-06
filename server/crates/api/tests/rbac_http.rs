@@ -350,6 +350,178 @@ async fn rbac_matrix_over_http() {
     )
     .await;
     assert_eq!(v["can_view_sensitive"], false);
+    // T-60: all project roles, including viewers, may create full-data capabilities.
+    let share_path = format!("/api/sessions/{sid}/shares");
+    let mut links = Vec::new();
+    for (i, s) in sessions.iter().enumerate() {
+        let (status, link) = call(
+            &app,
+            Some(s),
+            Method::POST,
+            &share_path,
+            Some(json!({"expiry": "24h"})),
+            true,
+        )
+        .await;
+        assert_eq!(status, if i == 4 { S::NOT_FOUND } else { S::OK });
+        if i < 4 {
+            links.push(link);
+        }
+    }
+    assert_eq!(
+        call(
+            &app,
+            None,
+            Method::POST,
+            &share_path,
+            Some(json!({"expiry": "1h"})),
+            false
+        )
+        .await
+        .0,
+        S::UNAUTHORIZED
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[3]),
+            Method::POST,
+            &share_path,
+            Some(json!({"expiry": "1h"})),
+            false
+        )
+        .await
+        .0,
+        S::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &app,
+            Some(&sessions[3]),
+            Method::POST,
+            &share_path,
+            Some(json!({"expiry": "forever"})),
+            true
+        )
+        .await
+        .0,
+        S::BAD_REQUEST
+    );
+    let (_, listing) = call(&app, Some(&sessions[3]), Method::GET, &share_path, None, true).await;
+    assert_eq!(listing["links"].as_array().unwrap().len(), 4);
+    assert!(!listing.to_string().contains("token"));
+    assert!(!listing.to_string().contains("url"));
+    let link = &links[3];
+    let token = link["url"].as_str().unwrap().rsplit('/').next().unwrap();
+    let public_path = format!("/api/public/shares/{token}");
+    let (status, public) = call(&app, None, Method::GET, &public_path, None, false).await;
+    assert_eq!(status, S::OK);
+    assert_eq!(public["id"], sid.to_string());
+    assert_eq!(public["can_view_sensitive"], true);
+    assert!(public.get("project_id").is_none());
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("{public_path}/recording"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), S::OK);
+    assert_eq!(response.headers()["referrer-policy"], "no-referrer");
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let bytes = axum::body::to_bytes(response.into_body(), 1 << 24).await.unwrap();
+    let mut text = String::new();
+    for f in replayd_common::rpl::index(&bytes).unwrap().frames {
+        let body = &bytes[f.body_range()];
+        let n = u32::from_le_bytes(body[..4].try_into().unwrap()) as usize;
+        std::io::Read::read_to_string(&mut flate2::read::GzDecoder::new(&body[4..4 + n]), &mut text).unwrap();
+    }
+    assert!(text.contains("SECRET_BODY") && text.contains("SECRET_HEADER") && text.contains("SECRET_FRAME"));
+    assert_eq!(
+        rec(3).await.1,
+        viewer,
+        "share creation does not change authenticated viewer filtering"
+    );
+    let hash: Vec<u8> = c
+        .query_one(
+            "SELECT token_hash FROM replay_shares WHERE id = $1::text::uuid",
+            &[&link["id"].as_str().unwrap()],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(hash, auth::token_hash(token));
+    assert_ne!(hash, token.as_bytes());
+    assert_eq!(
+        call(
+            &app,
+            None,
+            Method::GET,
+            &format!("{public_path}/sessions/{}", uuid::Uuid::now_v7()),
+            None,
+            false
+        )
+        .await
+        .0,
+        S::NOT_FOUND
+    );
+    let revoke = format!("{share_path}/{}", link["id"].as_str().unwrap());
+    assert_eq!(
+        call(&app, Some(&sessions[4]), Method::DELETE, &revoke, None, true)
+            .await
+            .0,
+        S::NOT_FOUND
+    );
+    assert_eq!(
+        call(&app, Some(&sessions[3]), Method::DELETE, &revoke, None, true)
+            .await
+            .0,
+        S::NO_CONTENT
+    );
+    assert_eq!(
+        call(&app, None, Method::GET, &public_path, None, false).await.0,
+        S::NOT_FOUND
+    );
+    for malformed in ["short", "!", "invalid-token"] {
+        assert_eq!(
+            call(
+                &app,
+                None,
+                Method::GET,
+                &format!("/api/public/shares/{malformed}"),
+                None,
+                false
+            )
+            .await
+            .0,
+            S::NOT_FOUND
+        );
+    }
+    let expired = &links[0];
+    c.execute(
+        "UPDATE replay_shares SET expires_at = now() - interval '1 second' WHERE id = $1::text::uuid",
+        &[&expired["id"].as_str().unwrap()],
+    )
+    .await
+    .unwrap();
+    let expired_token = expired["url"].as_str().unwrap().rsplit('/').next().unwrap();
+    assert_eq!(
+        call(
+            &app,
+            None,
+            Method::GET,
+            &format!("/api/public/shares/{expired_token}"),
+            None,
+            false
+        )
+        .await
+        .0,
+        S::NOT_FOUND
+    );
+    let audit_count: i64 = c.query_one("SELECT count(*) FROM audit_log WHERE action IN ('share.create','share.revoke') AND data->>'session_id' = $1", &[&sid.to_string()]).await.unwrap().get(0);
+    assert_eq!(audit_count, 5, "only creation and revocation are audited");
     std::fs::remove_dir_all(&data_dir).ok();
 
     // bad status → 400
